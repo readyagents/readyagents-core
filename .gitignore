@@ -32,10 +32,21 @@ htmlcov/
 # ReadyAgents local run artifacts
 .readyagents/
 
-# OS / editor
+# OS / editor / agent tooling
 .DS_Store
+Thumbs.db
 *.swp
 *.swo
+*.iml
 .idea/
 .vscode/
+.cursor/
+.grok/
+.ide/
+.zed/
+.windsurf/
+.claude/
+.codex/
+.continue/
+.history/
 *.code-workspace
