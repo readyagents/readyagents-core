@@ -1,0 +1,7 @@
+name: fixture_ok
+version: "1"
+nodes:
+  - id: t
+    type: transform
+    template: "ok"
+    output_key: v

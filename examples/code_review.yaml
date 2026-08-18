@@ -1,0 +1,32 @@
+name: code_review
+version: "1"
+description: >
+  Read a file from the workspace with the builtin read_file tool, then review it.
+  Example: readyagents run examples/code_review.yaml --input path=examples/sample_code.py
+
+inputs:
+  path: examples/sample_code.py
+
+start: read
+nodes:
+  - id: read
+    type: tool
+    tool: read_file
+    arguments:
+      path: "{{path}}"
+    output_key: source
+    next: review
+
+  - id: review
+    type: agent
+    system: >
+      You are a careful Python reviewer. Report bugs, edge cases, and one
+      improvement. Use a short markdown list. Do not rewrite the whole file.
+    prompt: |
+      Review this Python file (`{{path}}`):
+
+      ```python
+      {{source}}
+      ```
+    output_key: review
+    timeout_seconds: 120

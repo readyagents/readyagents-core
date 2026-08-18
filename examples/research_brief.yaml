@@ -1,0 +1,68 @@
+name: research_brief
+version: "1"
+description: >
+  Plan a short research outline, then write a brief on a topic.
+  Default mode is LLM-only (no network). To fetch a URL first, set allow_http: true
+  and READYAGENTS_ALLOW_HTTP=1, then pass --input url=https://...
+
+inputs:
+  topic: agent workflows
+  url: ""
+
+required_inputs: []
+allow_http: false
+start: plan
+
+nodes:
+  - id: plan
+    type: agent
+    system: >
+      You are a concise research planner. Return 3 short bullets, no preamble.
+    prompt: |
+      Create a 3-bullet research plan for this topic:
+
+      {{topic}}
+    output_key: plan
+    retry:
+      max_attempts: 2
+      backoff_seconds: 1
+    timeout_seconds: 120
+    next: maybe_fetch
+
+  - id: maybe_fetch
+    type: condition
+    when: allow_http == true
+    then: fetch
+    else: empty_source
+
+  - id: fetch
+    type: tool
+    tool: http_get
+    arguments:
+      url: "{{url}}"
+    output_key: source
+    next: write
+
+  - id: empty_source
+    type: transform
+    template: ""
+    output_key: source
+    next: write
+
+  - id: write
+    type: agent
+    system: >
+      You write short, factual research briefs. If source material is missing,
+      rely on general knowledge and label uncertainty. Keep it to 3–5 short paragraphs.
+    prompt: |
+      Topic: {{topic}}
+
+      Research plan:
+      {{plan}}
+
+      Optional source material (may be empty):
+      {{source}}
+
+      Write a short research brief.
+    output_key: brief
+    timeout_seconds: 120

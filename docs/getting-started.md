@@ -1,0 +1,81 @@
+# Getting started
+
+## Requirements
+
+- Python 3.11 or 3.12
+- A virtualenv (recommended)
+- Optional: an OpenAI or Anthropic API key for agent nodes
+
+## Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+```
+
+For a minimal install (no LLM/MCP SDKs):
+
+```bash
+pip install -e .
+```
+
+You can still run builtin-tool workflows. Agent nodes will ask you to install `readyagents[openai]` or `readyagents[anthropic]` and set a key.
+
+## Configure BYOK
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set at least one of:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+
+Optionally set `READYAGENTS_DEFAULT_MODEL=openai:gpt-4o-mini` (or `anthropic:claude-sonnet-4-5`).
+
+ReadyAgents never ships with vendor keys. You bring your own.
+
+## First run (no keys)
+
+```bash
+readyagents run examples/calc_pipeline.yaml
+```
+
+This uses `calc`, `now`, `json_get`, a transform, and a condition. It writes a run record under `.readyagents/runs/` (gitignored).
+
+## LLM examples
+
+```bash
+readyagents run examples/research_brief.yaml --input topic="retrieval augmented generation"
+readyagents run examples/support_triage.yaml --input message="I cannot log in"
+readyagents run examples/code_review.yaml --input path=examples/sample_code.py
+```
+
+`research_brief` is LLM-only by default. To fetch a URL before writing the brief:
+
+1. Set `allow_http: true` in the workflow (or `READYAGENTS_ALLOW_HTTP=1`)
+2. Pass `--input url=https://example.com/article`
+
+If HTTP is off, the writer still produces a plan + brief from the model alone.
+
+## Dry-run
+
+```bash
+readyagents run examples/research_brief.yaml --dry-run --input topic=test
+```
+
+Dry-run interpolates templates and walks the graph. It does not call an LLM or `http_get`.
+
+## Validate without running
+
+```bash
+readyagents validate examples/code_review.yaml
+```
+
+## Next
+
+- [Workflow syntax](workflows.md)
+- [Configuration](configuration.md)
+- [MCP toolkit](mcp.md)

@@ -1,0 +1,41 @@
+# Local secrets — never commit
+.env-ai
+.env
+.env.local
+.env.*
+!.env.example
+
+# Local SSH keys
+.keys/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ReadyAgents local run artifacts
+.readyagents/
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace

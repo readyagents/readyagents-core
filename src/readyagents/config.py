@@ -1,0 +1,152 @@
+"""BYOK settings: environment, then `.env`, then `.env-ai`."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from pydantic import AliasChoices, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from readyagents.errors import ConfigError, LLMError
+
+
+def _env_files() -> tuple[Path, ...]:
+    """Lowest-priority first: `.env-ai` then `.env`. OS env still wins."""
+    cwd = Path.cwd()
+    files: list[Path] = []
+    for name in (".env-ai", ".env"):
+        path = cwd / name
+        if path.is_file():
+            files.append(path)
+    return tuple(files)
+
+
+class Settings(BaseSettings):
+    """Runtime settings. Secrets are never logged by this class."""
+
+    model_config = SettingsConfigDict(
+        extra="ignore",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        populate_by_name=True,
+    )
+
+    openai_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENAI_API_KEY", "READYAGENTS_OPENAI_API_KEY"),
+    )
+    anthropic_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ANTHROPIC_API_KEY", "READYAGENTS_ANTHROPIC_API_KEY"),
+    )
+    openai_compat_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OPENAI_COMPAT_API_KEY",
+            "READYAGENTS_OPENAI_COMPAT_API_KEY",
+            "GROQ_API_KEY",
+        ),
+    )
+    openai_compat_base_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OPENAI_COMPAT_BASE_URL",
+            "READYAGENTS_OPENAI_COMPAT_BASE_URL",
+        ),
+    )
+    default_model: str = Field(
+        default="openai:gpt-4o-mini",
+        validation_alias=AliasChoices("READYAGENTS_DEFAULT_MODEL", "DEFAULT_MODEL"),
+    )
+    allow_http: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("READYAGENTS_ALLOW_HTTP"),
+    )
+    workspace: Path | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_WORKSPACE"),
+    )
+    home: Path = Field(
+        default=Path(".readyagents"),
+        validation_alias=AliasChoices("READYAGENTS_HOME"),
+    )
+    log_level: str = Field(
+        default="INFO",
+        validation_alias=AliasChoices("READYAGENTS_LOG_LEVEL"),
+    )
+
+    @field_validator("openai_api_key", "anthropic_api_key", "openai_compat_api_key", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    def workspace_path(self) -> Path:
+        return (self.workspace or Path.cwd()).expanduser().resolve()
+
+    def home_path(self) -> Path:
+        path = self.home
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        return path.expanduser().resolve()
+
+    def runs_dir(self) -> Path:
+        return self.home_path() / "runs"
+
+    def api_key_for(self, provider: str) -> str | None:
+        provider = provider.lower()
+        if provider in {"openai"}:
+            return self.openai_api_key
+        if provider in {"anthropic"}:
+            return self.anthropic_api_key
+        if provider in {"openai-compat", "openai_compat", "compat", "groq", "ollama"}:
+            return self.openai_compat_api_key or self.openai_api_key
+        return None
+
+
+def load_settings(*, env_file: tuple[Path, ...] | None = None) -> Settings:
+    """Load settings from OS env, then `.env`, then `.env-ai`."""
+    files = env_file if env_file is not None else _env_files()
+    try:
+        return Settings(_env_file=files)  # type: ignore[call-arg]
+    except Exception as exc:  # noqa: BLE001
+        raise ConfigError(f"Failed to load settings: {exc}") from exc
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return load_settings()
+
+
+def clear_settings_cache() -> None:
+    get_settings.cache_clear()
+
+
+def require_api_key(provider: str, settings: Settings | None = None) -> str:
+    settings = settings or get_settings()
+    key = settings.api_key_for(provider)
+    if key:
+        return key
+    hints = {
+        "openai": (
+            "Set OPENAI_API_KEY or READYAGENTS_OPENAI_API_KEY (copy .env.example to .env)."
+        ),
+        "anthropic": (
+            "Set ANTHROPIC_API_KEY or READYAGENTS_ANTHROPIC_API_KEY "
+            "(copy .env.example to .env)."
+        ),
+        "openai-compat": (
+            "Set OPENAI_COMPAT_API_KEY (and OPENAI_COMPAT_BASE_URL) "
+            "or OPENAI_API_KEY for a compatible endpoint."
+        ),
+    }
+    hint = hints.get(provider.lower(), f"Set an API key for provider '{provider}'.")
+    raise LLMError(
+        f"No API key configured for provider '{provider}'. "
+        f"ReadyAgents is BYOK — {hint}"
+    )

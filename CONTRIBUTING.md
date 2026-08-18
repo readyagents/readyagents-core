@@ -1,0 +1,41 @@
+# Contributing
+
+Thanks for improving ReadyAgents Core.
+
+## Setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Checks
+
+```bash
+make test
+make lint
+readyagents run examples/calc_pipeline.yaml
+```
+
+Or:
+
+```bash
+python -m pytest
+ruff check src tests
+```
+
+Tests must not use the network or real API keys. Mock LLM providers.
+
+## Guidelines
+
+- Keep the core small. Always-on / continuous systems belong in a **pack**, not this repo.
+- Typed errors over generic exceptions.
+- BYOK only — never commit secrets. `.env`, `.env-ai`, and `.keys/` are gitignored.
+- Apache-2.0 for original contributions unless you say otherwise in the PR.
+
+## Pull requests
+
+1. One focused change per PR
+2. Tests for engine/schema/tool behavior you touch
+3. No generated secrets, no run artifacts under `.readyagents/`

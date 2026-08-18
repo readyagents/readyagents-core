@@ -1,0 +1,72 @@
+# Packs
+
+ReadyAgents is **open-core**. This repository is the free engine. Commercial or extra capability layers are **packs**: installed Python packages that register extra tools, node types, and workflows.
+
+Core runs with **zero packs**.
+
+## Protocol
+
+A pack implements:
+
+```python
+from readyagents.packs import BasePack
+from readyagents.tools import FunctionTool
+
+class ContinuousPack(BasePack):
+    name = "continuous"
+    version = "1.0.0"
+
+    def register_tools(self):
+        return [
+            FunctionTool(
+                name="watch_queue",
+                description="Premium always-on helper",
+                handler=lambda: "not in core",
+            )
+        ]
+
+    def register_nodes(self):
+        return {}  # optional NodeHandler keyed by type name
+
+    def register_workflows(self):
+        return []  # optional bundled workflow paths or dicts
+```
+
+`register_nodes()` values should expose `type_name` and `execute(node, state, context)`.
+
+## Discovery
+
+Packs are loaded from the `readyagents.packs` [entry point](https://packaging.python.org/en/latest/specifications/entry-points/) group.
+
+In a future `readyagents-pack-continuous` project:
+
+```toml
+[project]
+name = "readyagents-pack-continuous"
+
+[project.entry-points."readyagents.packs"]
+continuous = "readyagents_pack_continuous:get_pack"
+```
+
+```python
+# readyagents_pack_continuous/__init__.py
+def get_pack():
+    return ContinuousPack()
+```
+
+```bash
+pip install readyagents-pack-continuous
+readyagents packs
+```
+
+The engine calls `discover_packs()` at run start and merges tools/node handlers. No change to core YAML is required except using the new tool or node type names.
+
+## Design rule
+
+Packs **compose on top** of core. They must not fork the engine. Always-on / continuous execution, hosted control planes, and premium connectors belong in packs — not in `readyagents-core`.
+
+List what is installed:
+
+```bash
+readyagents packs
+```
