@@ -151,7 +151,7 @@ Templates can use `{{parts.left}}`. Max 8 worker threads.
   output_key: nested
 ```
 
-Includes are depth-limited (8) so cycles fail with a typed error. Nested runs do not write their own run records.
+Includes are depth-limited (8) so cycles fail with a typed error. Nested runs do not write their own run records. The `path` is resolved relative to the parent workflow file and must stay under that directory (no `..` or absolute escapes).
 
 ## Transform
 

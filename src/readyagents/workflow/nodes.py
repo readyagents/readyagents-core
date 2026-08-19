@@ -247,9 +247,7 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     raw_path = interpolate(node.path or "", state.mapping())
     if not raw_path:
         raise NodeError(node.id, "include nodes require 'path'")
-    candidate = Path(raw_path)
-    if not candidate.is_absolute():
-        candidate = ctx.workflow_dir / candidate
+    candidate = _confine_include_path(raw_path, ctx.workflow_dir, node.id)
     if not candidate.is_file():
         raise NodeError(
             node.id,
@@ -296,6 +294,25 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         raise NodeError(node.id, f"included workflow '{spec.name}' {nested.status}")
     state.add_usage(**nested.usage)
     return nested.output_keys or nested.node_outputs
+
+
+def _confine_include_path(raw_path: str, workflow_dir: Path, node_id: str) -> Path:
+    """Resolve an include path and refuse anything outside the parent workflow dir."""
+    root = Path(workflow_dir).resolve()
+    text = str(raw_path).strip()
+    if not text or "\x00" in text:
+        raise NodeError(node_id, "include nodes require a path under the parent workflow directory")
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root):
+        raise NodeError(
+            node_id,
+            f"included workflow is outside the parent workflow directory: {raw_path} "
+            f"(resolved to {resolved}, must stay under {root})",
+        )
+    return resolved
 
 
 def evaluate_condition(expr: str, mapping: Mapping[str, Any]) -> bool:

@@ -5,11 +5,13 @@ from __future__ import annotations
 import ast
 import json
 import operator
+import os
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from readyagents.errors import ToolError
 from readyagents.tools import FunctionTool, Tool
@@ -192,24 +194,41 @@ def tool_read_file(path: str, *, workspace: Path) -> str:
     target = _sandbox_path(path, workspace)
     if not target.is_file():
         raise ToolError(f"read_file: not a file: {path}")
-    return target.read_text(encoding="utf-8")
+    try:
+        return target.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ToolError(f"read_file: could not read {path}: {exc}") from exc
 
 
 def tool_write_file(path: str, content: str, *, workspace: Path) -> str:
     target = _sandbox_path(path, workspace)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(str(content), encoding="utf-8")
+    if target.exists() and not target.is_file():
+        raise ToolError(f"write_file: not a file: {path}")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.parent / f".{target.name}.{uuid4().hex}.tmp"
+        try:
+            tmp.write_text(str(content), encoding="utf-8")
+            os.replace(tmp, target)
+        finally:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
+    except OSError as exc:
+        raise ToolError(f"write_file: could not write {path}: {exc}") from exc
     return str(target)
 
 
 def _sandbox_path(path: str, workspace: Path) -> Path:
-    workspace = workspace.resolve()
-    candidate = Path(path)
+    workspace = Path(workspace).resolve()
+    text = str(path).strip()
+    if not text or text in {".", ".."}:
+        raise ToolError("Path must be a file inside the workspace")
+    if "\x00" in text:
+        raise ToolError("Path contains invalid characters")
+    candidate = Path(text)
     if not candidate.is_absolute():
         candidate = workspace / candidate
     resolved = candidate.resolve()
-    try:
-        resolved.relative_to(workspace)
-    except ValueError as exc:
-        raise ToolError(f"Path '{path}' is outside the workspace") from exc
+    if not resolved.is_relative_to(workspace) or resolved == workspace:
+        raise ToolError(f"Path '{path}' is outside the workspace")
     return resolved

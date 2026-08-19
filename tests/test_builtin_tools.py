@@ -52,6 +52,63 @@ def test_file_sandbox(tmp_path: Path) -> None:
         tool_read_file("../outside.txt", workspace=tmp_path)
 
 
+def test_file_sandbox_rejects_absolute_and_write_escape(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("nope", encoding="utf-8")
+    with pytest.raises(ToolError, match="outside"):
+        tool_read_file(str(secret), workspace=workspace)
+    with pytest.raises(ToolError, match="outside"):
+        tool_write_file(str(secret), "overwrite", workspace=workspace)
+    with pytest.raises(ToolError, match="outside"):
+        tool_write_file("../escaped.txt", "x", workspace=workspace)
+    assert secret.read_text(encoding="utf-8") == "nope"
+    assert not (tmp_path / "escaped.txt").exists()
+
+
+def test_file_sandbox_rejects_empty_and_workspace_root(tmp_path: Path) -> None:
+    with pytest.raises(ToolError, match="workspace"):
+        tool_read_file("", workspace=tmp_path)
+    with pytest.raises(ToolError, match="workspace"):
+        tool_read_file(".", workspace=tmp_path)
+    with pytest.raises(ToolError, match="workspace"):
+        tool_write_file("..", "x", workspace=tmp_path)
+    (tmp_path / "sub").mkdir()
+    with pytest.raises(ToolError, match="not a file"):
+        tool_read_file("sub", workspace=tmp_path)
+    with pytest.raises(ToolError, match="not a file"):
+        tool_write_file("sub", "x", workspace=tmp_path)
+
+
+def test_write_file_is_atomic_and_nested(tmp_path: Path) -> None:
+    written = tool_write_file("a/b/out.txt", "hello", workspace=tmp_path)
+    target = tmp_path / "a" / "b" / "out.txt"
+    assert Path(written) == target
+    assert target.read_text(encoding="utf-8") == "hello"
+    assert list(tmp_path.rglob(".*.tmp")) == []
+    tool_write_file("a/b/out.txt", "replaced", workspace=tmp_path)
+    assert target.read_text(encoding="utf-8") == "replaced"
+    assert list(tmp_path.rglob(".*.tmp")) == []
+
+
+def test_file_sandbox_symlink_escape(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    victim = tmp_path / "victim.txt"
+    victim.write_text("secret", encoding="utf-8")
+    link = workspace / "link.txt"
+    try:
+        link.symlink_to(victim)
+    except OSError:
+        pytest.skip("symlinks not supported")
+    with pytest.raises(ToolError, match="outside"):
+        tool_read_file("link.txt", workspace=workspace)
+    with pytest.raises(ToolError, match="outside"):
+        tool_write_file("link.txt", "changed", workspace=workspace)
+    assert victim.read_text(encoding="utf-8") == "secret"
+
+
 def test_http_disabled_by_default(tmp_path: Path) -> None:
     registry = default_registry(allow_http=False, workspace=tmp_path)
     with pytest.raises(ToolError, match="disabled"):
