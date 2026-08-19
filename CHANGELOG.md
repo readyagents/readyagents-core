@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- `readyagents validate --json`; validate table shows `then`/`else`; duplicate parallel branch ids are rejected
 - Opt-in `http_get` refuses loopback, private, link-local, and metadata hosts (including redirects) and sends `User-Agent: readyagents/<version>`
 - Failed runs print the node timeline, `run_id`, and a `resume` hint; `run` / `resume` / `replay` accept `--json` (stdout, no Rich markup)
 - Resume applies `--input` overrides to stored inputs (retry a failed node with new values)

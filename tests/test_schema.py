@@ -123,6 +123,25 @@ def test_example_workflows_validate(examples_dir: Path) -> None:
         assert spec.nodes
 
 
+def test_duplicate_parallel_branch_ids_rejected() -> None:
+    with pytest.raises(ValidationError, match="duplicate parallel branch"):
+        WorkflowSpec.model_validate(
+            {
+                "name": "dup-branch",
+                "nodes": [
+                    {
+                        "id": "fan",
+                        "type": "parallel",
+                        "branches": [
+                            {"id": "a", "type": "transform", "template": "1"},
+                            {"id": "a", "type": "transform", "template": "2"},
+                        ],
+                    }
+                ],
+            }
+        )
+
+
 def test_parse_input_pairs() -> None:
     parsed = parse_input_pairs(["n=3", "flag=true", "name=Ada Lovelace"])
     assert parsed["n"] == 3

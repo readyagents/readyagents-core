@@ -166,6 +166,10 @@ class WorkflowSpec(BaseModel):
             for ref in (node.next, node.then, node.else_):
                 if ref is not None and ref not in known:
                     raise ValueError(f"Node '{node.id}' references unknown node '{ref}'")
+            if node.branches:
+                branch_ids = [b.id for b in node.branches]
+                if len(branch_ids) != len(set(branch_ids)):
+                    raise ValueError(f"Node '{node.id}': duplicate parallel branch ids")
         for edge in self.edges:
             if edge.from_ not in known:
                 raise ValueError(f"Edge from unknown node '{edge.from_}'")

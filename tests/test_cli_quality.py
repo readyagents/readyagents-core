@@ -62,6 +62,48 @@ def test_validate_missing_file(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+def test_validate_shows_else_routing() -> None:
+    result = runner.invoke(app, ["validate", "examples/approval_gate.yaml"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "then:receipt" in result.stdout
+    assert "else:denied" in result.stdout
+
+
+def test_validate_json_ok() -> None:
+    result = runner.invoke(app, ["validate", "examples/calc_pipeline.yaml", "--json"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is True
+    assert data["name"] == "calc_pipeline"
+    assert data["start"]
+    assert data["node_count"] >= 1
+    ids = [n["id"] for n in data["nodes"]]
+    assert "add" in ids
+    assert "stamp" in ids
+
+
+def test_validate_json_invalid(tmp_path: Path) -> None:
+    path = tmp_path / "bad.yaml"
+    path.write_text(
+        "name: bad\nnodes:\n  - id: a\n    type: transform\n    template: x\n    next: missing\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["validate", str(path), "--json"])
+    assert result.exit_code == 1
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is False
+    assert data["error"] == "WorkflowError"
+    assert "Invalid workflow" in data["message"]
+
+
+def test_validate_help_lists_json() -> None:
+    result = runner.invoke(app, ["validate", "--help"])
+    assert result.exit_code == 0
+    assert "--json" in result.stdout
+
+
 def test_init_writes_template_when_no_example(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     dest = tmp_path / ".env"

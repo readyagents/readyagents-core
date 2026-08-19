@@ -31,7 +31,7 @@ Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (de
 
 ## `readyagents validate PATH`
 
-Loads YAML/JSON and validates the Pydantic schema (unique node ids, dangling `next` / edges, required fields per type). Does not call tools or LLMs.
+Loads YAML/JSON and validates the Pydantic schema (unique node ids, dangling `next` / edges, required fields per type, unique parallel branch ids). Does not call tools or LLMs. `--json` prints `{ok, name, start, nodes}` (or `{ok: false, error, message}` on failure). The table shows `then:` / `else:` routing, not only `next`.
 
 ## `readyagents run PATH`
 

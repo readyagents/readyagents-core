@@ -153,20 +153,55 @@ def new_cmd(
 
 
 @app.command()
-def validate(path: Path = _WORKFLOW_ARG) -> None:
+def validate(
+    path: Path = _WORKFLOW_ARG,
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the workflow summary as JSON on stdout (no tables).",
+    ),
+) -> None:
     """Schema-validate a workflow file without executing it."""
     try:
         workflow = load_workflow(path)
     except ReadyAgentsError as exc:
+        if as_json:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
+            raise typer.Exit(code=1) from exc
         _fail(exc)
+    nodes = [
+        {
+            "id": node.id,
+            "type": str(node.type),
+            "next": node.next,
+            "then": node.then,
+            "else": node.else_,
+        }
+        for node in workflow.nodes
+    ]
+    if as_json:
+        _print_json(
+            {
+                "ok": True,
+                "name": workflow.name,
+                "start": workflow.start,
+                "node_count": len(workflow.nodes),
+                "nodes": nodes,
+            }
+        )
         return
     table = Table(title=f"Valid: {workflow.name}")
     table.add_column("Node")
     table.add_column("Type")
     table.add_column("Next")
     for node in workflow.nodes:
-        nxt = node.next or node.then or ""
-        table.add_row(node.id, str(node.type), nxt)
+        table.add_row(node.id, str(node.type), _node_routing(node))
     console.print(table)
     console.print(f"[green]OK[/green] — {len(workflow.nodes)} node(s), start={workflow.start}")
 
@@ -455,6 +490,18 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
 def _print_json(payload: object) -> None:
     """Write JSON to stdout without Rich markup (values may contain `[...]`)."""
     typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _node_routing(node: Any) -> str:
+    """Compact then/else/next for the validate table (else was previously dropped)."""
+    bits: list[str] = []
+    if node.then:
+        bits.append(f"then:{node.then}")
+    if node.else_:
+        bits.append(f"else:{node.else_}")
+    if node.next:
+        bits.append(node.next if not bits else f"next:{node.next}")
+    return " ".join(bits)
 
 
 def _state_from_exc(exc: BaseException) -> RunState | None:
