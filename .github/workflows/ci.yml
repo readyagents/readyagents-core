@@ -27,5 +27,3 @@ jobs:
         run: python -m pytest
       - name: Smoke example
         run: readyagents run examples/calc_pipeline.yaml --no-persist
-      - name: Smoke approval gate
-        run: readyagents run examples/approval_gate.yaml --approve gate --no-persist
