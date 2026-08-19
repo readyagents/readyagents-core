@@ -2,6 +2,10 @@
 
 Open-source **Agent Workflow engine + MCP Toolkit**. Bring your own API keys (BYOK).
 
+Tried it? Open an [I ran this](https://github.com/readyagents/readyagents-core/issues/new?template=i-ran-this.md) issue.
+We are not launching.
+We are listening.
+
 This is the free core of [ReadyAgents](https://github.com/readyagents). Commercial **packs** (always-on / continuous systems, hosted control plane) sit on top of this engine. They are not required to run workflows.
 
 Package `readyagents` **0.2.0**. Not on PyPI — install from this repo.
