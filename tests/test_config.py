@@ -73,3 +73,70 @@ def test_readyagents_prefixed_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     settings = load_settings(env_file=())
     assert settings.openai_api_key == "prefixed"
     clear_settings_cache()
+
+
+def test_implicit_default_uses_anthropic_key() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        default_model="openai:gpt-4o-mini",
+        openai_api_key=None,
+        anthropic_api_key="sk-ant-test",
+        openai_compat_api_key=None,
+        _env_file=(),
+    )
+    provider, model_id = get_provider(settings=settings, implicit=True)
+    assert provider.name == "anthropic"
+    assert model_id == "claude-sonnet-4-5"
+
+
+def test_implicit_default_uses_openai_when_that_key_exists() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        default_model="openai:gpt-4o-mini",
+        openai_api_key="sk-openai-test",
+        anthropic_api_key="sk-ant-test",
+        openai_compat_api_key=None,
+        _env_file=(),
+    )
+    provider, model_id = get_provider(settings=settings, implicit=True)
+    assert provider.name == "openai"
+    assert model_id == "gpt-4o-mini"
+
+
+def test_explicit_openai_model_does_not_fallback() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        default_model="openai:gpt-4o-mini",
+        openai_api_key=None,
+        anthropic_api_key="sk-ant-test",
+        openai_compat_api_key=None,
+        _env_file=(),
+    )
+    with pytest.raises(LLMError, match="OPENAI_API_KEY"):
+        get_provider("openai:gpt-4o-mini", settings=settings, implicit=False)
+
+
+def test_implicit_default_no_keys_same_error() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        default_model="openai:gpt-4o-mini",
+        openai_api_key=None,
+        anthropic_api_key=None,
+        openai_compat_api_key=None,
+        _env_file=(),
+    )
+    with pytest.raises(LLMError) as exc:
+        get_provider(settings=settings, implicit=True)
+    msg = str(exc.value)
+    assert "BYOK" in msg
+    assert "OPENAI_API_KEY" in msg
+
+
+def test_implicit_default_uses_compat_key() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        default_model="openai:gpt-4o-mini",
+        openai_api_key=None,
+        anthropic_api_key=None,
+        openai_compat_api_key="gsk-test",
+        openai_compat_base_url="https://api.groq.com/openai/v1",
+        _env_file=(),
+    )
+    provider, model_id = get_provider(settings=settings, implicit=True)
+    assert provider.name == "openai-compat"
+    assert model_id == "llama-3.1-8b-instant"

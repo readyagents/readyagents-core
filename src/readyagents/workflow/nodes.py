@@ -96,6 +96,7 @@ def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> str:
         estimated = _estimate_tokens(prompt, system or "")
         state.add_usage(estimated_tokens=estimated)
         return f"[dry-run]\n{preview}\n[estimated_tokens={estimated}]"
+    explicit = bool(node.model)
     model_ref = node.model or ctx.default_model
     if ctx.llm is not None:
         provider = ctx.llm
@@ -103,7 +104,7 @@ def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> str:
         if model_ref and ":" in model_ref:
             model_id = model_ref.split(":", 1)[1]
     else:
-        provider, model_id = get_provider(model_ref)
+        provider, model_id = get_provider(model_ref, implicit=not explicit)
     messages: list[Message] = []
     if system:
         messages.append(Message(role="system", content=system))

@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- Implicit default model uses the BYOK provider that has a key (explicit `model:` is unchanged)
 - `readyagents new` defaults to the keyless `pipeline` template (`--template approval` still works)
 - HTML run reports: `readyagents runs report RUN_ID`
 - Extra `readyagents new` templates: `pipeline`, `review`

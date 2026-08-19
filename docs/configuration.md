@@ -40,6 +40,8 @@ pip install "readyagents[all]"
 
 If an agent node runs with no key, the CLI exits with a short `LLMError` telling you which variable to set — not a traceback dump.
 
+If the node has no explicit `model:` and the default provider has no key, the engine uses the provider that *does* have a key (Anthropic, then OpenAI-compatible). An explicit `model: openai:...` still requires that key.
+
 ## Other settings
 
 | Variable | Purpose |
