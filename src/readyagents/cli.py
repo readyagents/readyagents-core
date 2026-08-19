@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -11,11 +12,23 @@ from rich.panel import Panel
 from rich.table import Table
 
 from readyagents import __version__
-from readyagents.errors import ReadyAgentsError
+from readyagents.errors import ApprovalRequired, ReadyAgentsError
 from readyagents.logging import configure_logging
 from readyagents.packs.loader import discover_packs
-from readyagents.workflow.runner import load_workflow, run_workflow_file
-from readyagents.workflow.state import parse_input_pairs
+from readyagents.scaffold import TEMPLATES, create_project
+from readyagents.workflow.runner import (
+    load_workflow,
+    replay_run,
+    resume_run,
+    run_workflow_file,
+)
+from readyagents.workflow.state import (
+    RunState,
+    build_decisions,
+    list_runs,
+    load_run,
+    parse_input_pairs,
+)
 
 app = typer.Typer(
     name="readyagents",
@@ -24,7 +37,9 @@ app = typer.Typer(
     add_completion=False,
 )
 mcp_app = typer.Typer(help="Run ReadyAgents as an MCP server.", no_args_is_help=True)
+runs_app = typer.Typer(help="Inspect persisted workflow runs.", no_args_is_help=True)
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(runs_app, name="runs")
 
 console = Console()
 err_console = Console(stderr=True)
@@ -91,14 +106,49 @@ def _print_next_steps() -> None:
         Panel(
             "[bold]Next steps[/bold]\n"
             "1. Edit `.env` and set OPENAI_API_KEY and/or ANTHROPIC_API_KEY\n"
-            "2. Smoke test (no keys):  "
+            "2. Scaffold:  [cyan]readyagents new my-flow[/cyan]\n"
+            "3. Smoke test (no keys):  "
             "[cyan]readyagents run examples/calc_pipeline.yaml[/cyan]\n"
-            "3. With keys:  [cyan]readyagents run examples/research_brief.yaml "
+            "4. With keys:  [cyan]readyagents run examples/research_brief.yaml "
             "--input topic=your-topic[/cyan]\n"
             "See docs/getting-started.md",
             title="ReadyAgents",
         )
     )
+
+
+@app.command("new")
+def new_cmd(
+    name: str = typer.Argument("starter", help="Project / workflow name."),
+    dest: Path | None = typer.Option(
+        None,
+        "--dest",
+        help="Directory to write (defaults to ./<name>).",
+    ),
+    template: str = typer.Option(
+        "approval",
+        "--template",
+        "-t",
+        help=f"Starter kind: {', '.join(TEMPLATES)}.",
+    ),
+) -> None:
+    """Write a starter workflow, README, and `.env.example`."""
+    target = dest if dest is not None else Path(name)
+    try:
+        written = create_project(target, name=name, template=template)
+    except ReadyAgentsError as exc:
+        _fail(exc)
+        return
+    console.print(f"[green]Created {target.resolve()}[/green]  template={template}")
+    for path in written:
+        console.print(f"  {path.name}")
+    wf = target / "workflow.yaml"
+    if template == "basic":
+        console.print(f"Run: [cyan]readyagents run {wf}[/cyan]")
+    elif template == "research":
+        console.print(f"Run: [cyan]readyagents run {wf} --approve publish[/cyan]")
+    else:
+        console.print(f"Run: [cyan]readyagents run {wf} --approve gate[/cyan]")
 
 
 @app.command()
@@ -137,32 +187,102 @@ def run(
     no_persist: bool = typer.Option(
         False, "--no-persist", help="Do not write a run record."
     ),
+    approve: list[str] = typer.Option(
+        [],
+        "--approve",
+        help="Approve an approval node by id (repeatable).",
+    ),
+    reject: list[str] = typer.Option(
+        [],
+        "--reject",
+        help="Reject an approval node by id (repeatable).",
+    ),
+    resume: str | None = typer.Option(
+        None,
+        "--resume",
+        help="Resume this run id instead of starting a new run.",
+    ),
 ) -> None:
     """Execute a workflow."""
     try:
         parsed = parse_input_pairs(inputs)
-        state = run_workflow_file(
-            path,
-            inputs=parsed,
-            dry_run=dry_run,
-            persist=not no_persist,
-        )
+        decisions = build_decisions(approve, reject)
+        if resume:
+            state = resume_run(
+                resume,
+                path=path,
+                inputs=parsed or None,
+                dry_run=dry_run,
+                persist=not no_persist,
+                decisions=decisions,
+            )
+        else:
+            state = run_workflow_file(
+                path,
+                inputs=parsed,
+                dry_run=dry_run,
+                persist=not no_persist,
+                decisions=decisions,
+            )
+    except ApprovalRequired as exc:
+        _print_paused(exc)
+        raise typer.Exit(code=2) from exc
     except ReadyAgentsError as exc:
         _fail(exc)
         return
 
-    table = Table(title=f"Run {state.run_id} — {state.status}")
-    table.add_column("Node")
-    table.add_column("Type")
-    table.add_column("Status")
-    table.add_column("Output", overflow="fold")
-    for result in state.results:
-        preview = result.error or _preview(result.output)
-        table.add_row(result.node_id, result.type, result.status, escape(preview))
-    console.print(table)
+    _print_run(state)
     if state.status != "succeeded":
         raise typer.Exit(code=1)
     console.print("[green]succeeded[/green]")
+    _print_usage(state)
+    if state.output_keys:
+        console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
+
+
+@app.command("resume")
+def resume_cmd(
+    run_id: str = typer.Argument(..., help="Run id (or unique prefix)."),
+    workflow: Path | None = typer.Option(
+        None,
+        "--workflow",
+        exists=True,
+        readable=True,
+        help="Workflow file (defaults to the path stored on the run).",
+    ),
+    inputs: list[str] = typer.Option(
+        [],
+        "--input",
+        "-i",
+        help="Override stored inputs as KEY=VALUE (repeatable).",
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    no_persist: bool = typer.Option(False, "--no-persist"),
+    approve: list[str] = typer.Option([], "--approve"),
+    reject: list[str] = typer.Option([], "--reject"),
+) -> None:
+    """Resume a paused or failed run from the last successful node."""
+    try:
+        parsed = parse_input_pairs(inputs)
+        state = resume_run(
+            run_id,
+            path=workflow,
+            inputs=parsed or None,
+            dry_run=dry_run,
+            persist=not no_persist,
+            decisions=build_decisions(approve, reject),
+        )
+    except ApprovalRequired as exc:
+        _print_paused(exc)
+        raise typer.Exit(code=2) from exc
+    except ReadyAgentsError as exc:
+        _fail(exc)
+        return
+    _print_run(state)
+    if state.status != "succeeded":
+        raise typer.Exit(code=1)
+    console.print("[green]succeeded[/green]")
+    _print_usage(state)
     if state.output_keys:
         console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
 
@@ -185,6 +305,106 @@ def packs_cmd() -> None:
     console.print(table)
 
 
+@runs_app.command("list")
+def runs_list(
+    as_json: bool = typer.Option(False, "--json", help="Print JSON instead of a table."),
+    status: str | None = typer.Option(
+        None, "--status", help="Filter: running, paused, failed, succeeded."
+    ),
+    workflow: str | None = typer.Option(None, "--workflow", help="Filter by workflow name."),
+    limit: int = typer.Option(0, "--limit", help="Max rows (0 = all)."),
+) -> None:
+    """List persisted runs (newest first)."""
+    from readyagents.config import get_settings
+
+    settings = get_settings()
+    found = list_runs(
+        settings.runs_dir(),
+        status=status,
+        workflow=workflow,
+        limit=limit,
+    )
+    if as_json:
+        payload = [
+            {
+                "run_id": s.run_id,
+                "workflow": s.workflow_name,
+                "status": s.status,
+                "started_at": s.started_at,
+                "pending_node": s.pending_node,
+                "nodes": [r.node_id for r in s.results],
+            }
+            for s in found
+        ]
+        console.print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    if not found:
+        console.print(f"No runs in {settings.runs_dir()}")
+        return
+    table = Table(title=f"Runs in {settings.runs_dir()}", expand=True)
+    table.add_column("run_id", no_wrap=True, overflow="fold")
+    table.add_column("workflow")
+    table.add_column("status")
+    table.add_column("started_at")
+    table.add_column("nodes")
+    for state in found:
+        nodes = ",".join(r.node_id for r in state.results) or "-"
+        table.add_row(state.run_id, state.workflow_name, state.status, state.started_at, nodes)
+        console.print(
+            f"run_id: {state.run_id}  workflow: {state.workflow_name}  status: {state.status}"
+        )
+    console.print(table)
+
+
+@runs_app.command("show")
+def runs_show(
+    run_id: str = typer.Argument(..., help="Run id (or unique prefix)."),
+    as_json: bool = typer.Option(False, "--json", help="Print the stored run record as JSON."),
+) -> None:
+    """Show a run record and its node timeline."""
+    _show_run(run_id, as_json=as_json)
+
+
+@runs_app.command("inspect")
+def runs_inspect(
+    run_id: str = typer.Argument(..., help="Run id (or unique prefix)."),
+    as_json: bool = typer.Option(False, "--json", help="Print the stored run record as JSON."),
+) -> None:
+    """Alias for `runs show` — inspect stored state and the node timeline."""
+    _show_run(run_id, as_json=as_json)
+
+
+@runs_app.command("replay")
+def runs_replay(
+    run_id: str = typer.Argument(..., help="Run id (or unique prefix)."),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    no_persist: bool = typer.Option(False, "--no-persist"),
+    approve: list[str] = typer.Option([], "--approve"),
+    reject: list[str] = typer.Option([], "--reject"),
+) -> None:
+    """Start a new run using the stored workflow path and inputs."""
+    try:
+        state = replay_run(
+            run_id,
+            dry_run=dry_run,
+            persist=not no_persist,
+            decisions=build_decisions(approve, reject),
+        )
+    except ApprovalRequired as exc:
+        _print_paused(exc)
+        raise typer.Exit(code=2) from exc
+    except ReadyAgentsError as exc:
+        _fail(exc)
+        return
+    _print_run(state)
+    if state.status != "succeeded":
+        raise typer.Exit(code=1)
+    console.print("[green]succeeded[/green]")
+    _print_usage(state)
+    if state.output_keys:
+        console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
+
+
 @mcp_app.command("serve")
 def mcp_serve() -> None:
     """Expose builtin tools (and run_workflow) over MCP stdio."""
@@ -194,6 +414,60 @@ def mcp_serve() -> None:
         serve_stdio()
     except ReadyAgentsError as exc:
         _fail(exc)
+
+
+def _show_run(run_id: str, *, as_json: bool = False) -> None:
+    from readyagents.config import get_settings
+
+    try:
+        state = load_run(get_settings().runs_dir(), run_id)
+    except ReadyAgentsError as exc:
+        _fail(exc)
+        return
+    if as_json:
+        console.print(json.dumps(state.to_record(), indent=2, ensure_ascii=False))
+        return
+    console.print(f"run_id: {state.run_id}")
+    console.print(f"workflow: {state.workflow_name}")
+    console.print(f"status: {state.status}")
+    if state.pending_node:
+        console.print(f"pending_node: {state.pending_node}")
+    _print_usage(state)
+    _print_run(state)
+    if state.output_keys:
+        console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
+    if state.inputs:
+        console.print(Panel(escape(_preview(state.inputs, limit=2000)), title="Inputs"))
+
+
+def _print_usage(state: RunState) -> None:
+    if not state.usage:
+        return
+    parts = [f"{k}={v}" for k, v in state.usage.items()]
+    console.print("usage: " + " ".join(parts))
+
+
+def _print_run(state: RunState) -> None:
+    table = Table(title=f"Run {state.run_id} — {state.status}")
+    table.add_column("Node")
+    table.add_column("Type")
+    table.add_column("Status")
+    table.add_column("Output", overflow="fold")
+    for result in state.results:
+        preview = result.error or _preview(result.output)
+        table.add_row(result.node_id, result.type, result.status, escape(preview))
+    console.print(table)
+
+
+def _print_paused(exc: ApprovalRequired) -> None:
+    if exc.state is not None and isinstance(exc.state, RunState):
+        _print_run(exc.state)
+    err_console.print(f"[yellow]{type(exc).__name__}:[/yellow] {exc}")
+    if exc.prompt:
+        console.print(Panel(escape(exc.prompt), title=f"Approval: {exc.node_id}"))
+    console.print(
+        f"Resume: [cyan]readyagents resume {exc.run_id} --approve {exc.node_id}[/cyan]"
+    )
 
 
 def _preview(value: object, limit: int = 160) -> str:

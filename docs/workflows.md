@@ -42,7 +42,7 @@ readyagents run hello.yaml --input name=Ada
 | Field | Meaning |
 | --- | --- |
 | `id` | Unique id |
-| `type` | `agent` \| `tool` \| `condition` \| `transform` |
+| `type` | `agent` \| `tool` \| `condition` \| `transform` \| `approval` \| `parallel` \| `include` |
 | `next` | Default successor if no edges |
 | `output_key` | Alias for templates (`{{brief}}` instead of `{{write}}`) |
 | `timeout_seconds` | Soft timeout |
@@ -96,6 +96,63 @@ Supported expressions (no Python `eval`):
 - quoted strings, numbers, `true` / `false`
 - `{{templates}}` on either side
 
+## Approval (human-in-the-loop)
+
+```yaml
+- id: gate
+  type: approval
+  prompt: "Release payment of {{total}}?"
+  then: receipt
+  else: denied
+```
+
+The engine **pauses** (status `paused`, `pending_node` set) until you pass an explicit decision. It does not block on a TTY.
+
+```bash
+readyagents run pay.yaml --approve gate
+readyagents run pay.yaml --reject gate
+readyagents resume <run_id> --approve gate
+```
+
+`then` is the approve path; `else` is the reject path. `next` is used when approved if `then` is omitted.
+
+Multiple gates in one graph are allowed. Each needs its own `--approve NODE` (or `--reject`).
+
+## Parallel
+
+Independent branches run concurrently. Output is a mapping of branch id → result.
+
+```yaml
+- id: fan
+  type: parallel
+  output_key: parts
+  next: join
+  branches:
+    - id: left
+      type: tool
+      tool: calc
+      arguments:
+        expression: "1+1"
+    - id: right
+      type: tool
+      tool: now
+```
+
+Templates can use `{{parts.left}}`. Max 8 worker threads.
+
+## Include (sub-workflow)
+
+```yaml
+- id: child
+  type: include
+  path: included_min.yaml   # relative to the parent file
+  inputs:
+    n: "{{n}}"
+  output_key: nested
+```
+
+Includes are depth-limited (8) so cycles fail with a typed error. Nested runs do not write their own run records.
+
 ## Transform
 
 ```yaml
@@ -133,13 +190,22 @@ An edge without `when` is the default if no conditioned edge matches.
 
 ## Run records
 
-Successful and failed runs persist to `.readyagents/runs/<run_id>.json` unless you pass `--no-persist`.
+Runs persist to `.readyagents/runs/<run_id>.json` **after each node** unless you pass `--no-persist`. Paused and failed runs store `pending_node` so `readyagents resume` continues from the last successful node.
+
+```bash
+readyagents runs list
+readyagents runs show <run_id>
+readyagents runs replay <run_id>
+```
 
 ## Examples in this repo
 
 | File | Needs LLM | Notes |
 | --- | --- | --- |
 | `examples/calc_pipeline.yaml` | No | Clone-and-run smoke test |
+| `examples/approval_gate.yaml` | No | Human-in-the-loop approval |
+| `examples/fanout_gate.yaml` | No | Parallel fan-out + approval |
+| `examples/include_demo.yaml` | No | Sub-workflow `include` |
 | `examples/research_brief.yaml` | Yes | Optional HTTP fetch |
 | `examples/support_triage.yaml` | Yes | JSON classify then branch |
 | `examples/code_review.yaml` | Yes | Builtin `read_file` + review |

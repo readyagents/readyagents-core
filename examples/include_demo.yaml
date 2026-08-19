@@ -1,0 +1,23 @@
+name: include_demo
+version: "1"
+description: >
+  Compose a child workflow via type: include. No LLM, no keys.
+  Run: readyagents run examples/include_demo.yaml --input n=5
+
+inputs:
+  n: 5
+
+start: child
+nodes:
+  - id: child
+    type: include
+    path: included_min.yaml
+    inputs:
+      n: "{{n}}"
+    output_key: nested
+    next: wrap
+
+  - id: wrap
+    type: transform
+    template: "include_demo ok: {{nested.total}}"
+    output_key: summary

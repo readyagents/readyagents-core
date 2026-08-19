@@ -15,6 +15,9 @@ class NodeType(StrEnum):
     tool = "tool"
     condition = "condition"
     transform = "transform"
+    approval = "approval"
+    parallel = "parallel"
+    include = "include"
 
 
 class RetrySpec(BaseModel):
@@ -67,6 +70,13 @@ class NodeSpec(BaseModel):
     json_path: str | None = None
     parse_json: bool = False
 
+    # parallel
+    branches: list[NodeSpec] = Field(default_factory=list)
+
+    # include (sub-workflow)
+    path: str | None = None
+    call_inputs: dict[str, Any] = Field(default_factory=dict, alias="inputs")
+
     @field_validator("id")
     @classmethod
     def _id_token(cls, value: str) -> str:
@@ -100,6 +110,17 @@ class NodeSpec(BaseModel):
                     f"Node '{self.id}': transform nodes require "
                     "'template', 'json_path', or parse_json"
                 )
+        if t == NodeType.approval.value:
+            if not self.prompt:
+                raise ValueError(f"Node '{self.id}': approval nodes require 'prompt'")
+            if not self.then and not self.else_ and not self.next:
+                raise ValueError(
+                    f"Node '{self.id}': approval nodes require 'then', 'else', or 'next'"
+                )
+        if t == NodeType.parallel.value and not self.branches:
+            raise ValueError(f"Node '{self.id}': parallel nodes require 'branches'")
+        if t == NodeType.include.value and not self.path:
+            raise ValueError(f"Node '{self.id}': include nodes require 'path'")
         return self
 
 
@@ -169,3 +190,6 @@ def validate_required_inputs(workflow: WorkflowSpec, provided: dict[str, Any]) -
     missing = [name for name in workflow.required_inputs if name not in provided]
     if missing:
         raise WorkflowError(f"Missing required inputs: {', '.join(missing)}")
+
+
+NodeSpec.model_rebuild()

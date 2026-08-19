@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
-from readyagents.errors import NodeError, TemplateError, ToolError, WorkflowError
+from readyagents.errors import ApprovalRequired, NodeError, TemplateError, ToolError, WorkflowError
 from readyagents.llm.base import LLMProvider, Message
 from readyagents.llm.registry import get_provider
 from readyagents.tools import ToolRegistry
@@ -21,6 +23,12 @@ _COMPARE = re.compile(
 )
 
 
+_APPROVE_VALUES = {"approve", "approved", "yes", "true", "accept", "ok"}
+_REJECT_VALUES = {"reject", "rejected", "deny", "denied", "no", "false"}
+_MAX_INCLUDE_DEPTH = 8
+_MAX_PARALLEL = 8
+
+
 class ExecutionContext:
     def __init__(
         self,
@@ -31,6 +39,10 @@ class ExecutionContext:
         llm: LLMProvider | None = None,
         default_model: str | None = None,
         extra_handlers: Mapping[str, Any] | None = None,
+        decisions: Mapping[str, str] | None = None,
+        on_persist: Callable[[RunState], None] | None = None,
+        workflow_dir: Path | None = None,
+        include_depth: int = 0,
     ) -> None:
         self.workflow = workflow
         self.tools = tools
@@ -38,6 +50,14 @@ class ExecutionContext:
         self.llm = llm
         self.default_model = default_model or workflow.default_model
         self.extra_handlers = dict(extra_handlers or {})
+        self.decisions = {str(k): str(v).strip().lower() for k, v in dict(decisions or {}).items()}
+        self.on_persist = on_persist
+        self.workflow_dir = Path(workflow_dir) if workflow_dir else Path.cwd()
+        self.include_depth = include_depth
+
+    def decision_for(self, node_id: str) -> str | None:
+        value = self.decisions.get(node_id)
+        return value if value else None
 
 
 def execute_node(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
@@ -54,6 +74,12 @@ def execute_node(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         return _run_transform(node, state, ctx)
     if kind == NodeType.condition.value:
         return _run_condition(node, state, ctx)
+    if kind == NodeType.approval.value:
+        return _run_approval(node, state, ctx)
+    if kind == NodeType.parallel.value:
+        return _run_parallel(node, state, ctx)
+    if kind == NodeType.include.value:
+        return _run_include(node, state, ctx)
     raise WorkflowError(f"Unsupported node type: {node.type}")
 
 
@@ -63,7 +89,9 @@ def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> str:
     system = interpolate(node.system, ns) if node.system else None
     if ctx.dry_run:
         preview = prompt if not system else f"[system]\n{system}\n[user]\n{prompt}"
-        return f"[dry-run]\n{preview}"
+        estimated = _estimate_tokens(prompt, system or "")
+        state.add_usage(estimated_tokens=estimated)
+        return f"[dry-run]\n{preview}\n[estimated_tokens={estimated}]"
     model_ref = node.model or ctx.default_model
     if ctx.llm is not None:
         provider = ctx.llm
@@ -77,6 +105,8 @@ def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> str:
         messages.append(Message(role="system", content=system))
     messages.append(Message(role="user", content=prompt))
     result = provider.complete(messages, model=model_id)
+    if result.usage:
+        state.add_usage(**result.usage)
     return result.text
 
 
@@ -105,7 +135,10 @@ def _run_transform(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> An
 
     if node.parse_json:
         if isinstance(value, str):
-            value = _parse_json_lenient(value)
+            if ctx.dry_run and value.lstrip().startswith("[dry-run]"):
+                value = {"dry_run": True}
+            else:
+                value = _parse_json_lenient(value)
     if node.json_path:
         if isinstance(value, str):
             try:
@@ -139,6 +172,112 @@ def _run_condition(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> di
     matched = evaluate_condition(node.when or "", state.mapping())
     nxt = node.then if matched else node.else_
     return {"matched": matched, "next": nxt}
+
+
+def _run_approval(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dict[str, Any]:
+    ns = state.mapping()
+    prompt = interpolate(node.prompt or f"Approve node '{node.id}'?", ns)
+    raw = ctx.decision_for(node.id)
+    if raw is None:
+        raise ApprovalRequired(node.id, state.run_id, prompt, state=state)
+    if raw in _APPROVE_VALUES:
+        approved = True
+    elif raw in _REJECT_VALUES:
+        approved = False
+    else:
+        raise NodeError(
+            node.id,
+            f"unknown decision '{raw}' (use approve or reject)",
+        )
+    if approved:
+        nxt = node.then or node.next
+    else:
+        nxt = node.else_
+    return {
+        "approved": approved,
+        "decision": "approve" if approved else "reject",
+        "prompt": prompt,
+        "next": nxt,
+    }
+
+
+def _estimate_tokens(*texts: str) -> int:
+    total = sum(len(t or "") for t in texts)
+    return max(1, total // 4)
+
+
+def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dict[str, Any]:
+    branches = list(node.branches or [])
+    if not branches:
+        raise NodeError(node.id, "parallel nodes require 'branches'")
+    collected: dict[str, Any] = {}
+
+    def _one(branch: NodeSpec) -> tuple[str, Any]:
+        return branch.id, execute_node(branch, state, ctx)
+
+    workers = max(1, min(_MAX_PARALLEL, len(branches)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_one, branch) for branch in branches]
+        for fut in as_completed(futures):
+            branch_id, output = fut.result()
+            collected[branch_id] = output
+    ordered = {branch.id: collected[branch.id] for branch in branches}
+    return ordered
+
+
+def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
+    if ctx.include_depth >= _MAX_INCLUDE_DEPTH:
+        raise WorkflowError(
+            f"include depth exceeded ({_MAX_INCLUDE_DEPTH}). Check for cycles in sub-workflows."
+        )
+    raw_path = interpolate(node.path or "", state.mapping())
+    if not raw_path:
+        raise NodeError(node.id, "include nodes require 'path'")
+    candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        candidate = ctx.workflow_dir / candidate
+    if not candidate.is_file():
+        raise NodeError(node.id, f"included workflow not found: {candidate}")
+
+    from readyagents.workflow.engine import run_workflow
+    from readyagents.workflow.runner import load_workflow, merge_inputs
+
+    spec = load_workflow(candidate)
+    nested_in = interpolate_value(node.call_inputs, state.mapping())
+    if nested_in is None:
+        nested_in = {}
+    if not isinstance(nested_in, dict):
+        raise NodeError(node.id, "include inputs must be a mapping")
+    merged = merge_inputs(spec, nested_in)
+    nested_ctx = ExecutionContext(
+        spec,
+        ctx.tools,
+        dry_run=ctx.dry_run,
+        llm=ctx.llm,
+        default_model=ctx.default_model,
+        extra_handlers=ctx.extra_handlers,
+        decisions=ctx.decisions,
+        on_persist=None,
+        workflow_dir=candidate.parent,
+        include_depth=ctx.include_depth + 1,
+    )
+    nested = run_workflow(
+        spec,
+        merged,
+        nested_ctx,
+        metadata={"source": str(candidate), "included_by": node.id},
+    )
+    if nested.status == "paused":
+        raise ApprovalRequired(
+            nested.pending_node or node.id,
+            state.run_id,
+            f"Nested workflow '{spec.name}' is waiting for approval.",
+            state=state,
+        )
+    if nested.status != "succeeded":
+        raise NodeError(node.id, f"included workflow '{spec.name}' {nested.status}")
+    state.add_usage(**nested.usage)
+    return nested.output_keys or nested.node_outputs
 
 
 def evaluate_condition(expr: str, mapping: Mapping[str, Any]) -> bool:

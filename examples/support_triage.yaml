@@ -3,6 +3,7 @@ version: "1"
 description: >
   Classify a customer message (priority + category) then draft a reply.
   Classification should be JSON only so the condition node can branch.
+  Dry-run: readyagents run examples/support_triage.yaml --dry-run
 
 inputs:
   message: >

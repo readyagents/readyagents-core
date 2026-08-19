@@ -18,7 +18,7 @@ from readyagents.tools import ToolRegistry, default_registry
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
 from readyagents.workflow.schema import WorkflowSpec, validate_required_inputs
-from readyagents.workflow.state import RunState, persist_run
+from readyagents.workflow.state import RunState, load_run, persist_run
 
 
 def load_workflow(path: Path | str) -> WorkflowSpec:
@@ -66,10 +66,18 @@ def run_workflow_file(
     llm: LLMProvider | None = None,
     persist: bool = True,
     extra_tools: ToolRegistry | None = None,
+    decisions: Mapping[str, str] | None = None,
+    resume_state: RunState | None = None,
 ) -> RunState:
     settings = settings or get_settings()
     workflow = load_workflow(path)
-    merged = merge_inputs(workflow, inputs)
+    if resume_state is not None:
+        merged = dict(resume_state.inputs)
+        if inputs:
+            merged.update(inputs)
+        validate_required_inputs(workflow, merged)
+    else:
+        merged = merge_inputs(workflow, inputs)
 
     workspace = Path(workflow.workspace) if workflow.workspace else settings.workspace_path()
     if not workspace.is_absolute():
@@ -89,6 +97,12 @@ def run_workflow_file(
         mcp = MCPClient(workflow.mcp_servers)
         tools.merge(mcp.tools())
 
+    runs_dir = settings.runs_dir()
+
+    def _save(state: RunState) -> None:
+        persist_run(state, runs_dir)
+
+    source_path = Path(path).resolve() if Path(path).exists() else Path(path)
     ctx = ExecutionContext(
         workflow,
         tools,
@@ -96,19 +110,87 @@ def run_workflow_file(
         llm=llm,
         default_model=workflow.default_model or settings.default_model,
         extra_handlers=collect_pack_nodes(packs),
+        decisions=decisions,
+        on_persist=_save if persist else None,
+        workflow_dir=source_path.parent,
     )
     metadata = {
-        "source": str(Path(path)),
+        "source": str(source_path),
         "allow_http": allow_http,
         "dry_run": dry_run,
         "workspace": str(workspace),
     }
     try:
-        state = run_workflow(workflow, merged, ctx, metadata=metadata)
+        state = run_workflow(
+            workflow,
+            merged,
+            ctx,
+            metadata=metadata,
+            state=resume_state,
+        )
     finally:
         if mcp is not None:
             mcp.close()
-
-    if persist:
-        persist_run(state, settings.runs_dir())
     return state
+
+
+def resume_run(
+    run_id: str,
+    *,
+    settings: Settings | None = None,
+    path: Path | str | None = None,
+    inputs: Mapping[str, Any] | None = None,
+    dry_run: bool = False,
+    persist: bool = True,
+    extra_tools: ToolRegistry | None = None,
+    decisions: Mapping[str, str] | None = None,
+    llm: LLMProvider | None = None,
+) -> RunState:
+    settings = settings or get_settings()
+    state = load_run(settings.runs_dir(), run_id)
+    source = path or state.metadata.get("source")
+    if not source:
+        raise ConfigError(
+            f"Run {state.run_id} has no stored workflow path. Pass --workflow PATH."
+        )
+    return run_workflow_file(
+        source,
+        inputs=inputs,
+        dry_run=dry_run,
+        settings=settings,
+        llm=llm,
+        persist=persist,
+        extra_tools=extra_tools,
+        decisions=decisions,
+        resume_state=state,
+    )
+
+
+def replay_run(
+    run_id: str,
+    *,
+    settings: Settings | None = None,
+    persist: bool = True,
+    dry_run: bool = False,
+    extra_tools: ToolRegistry | None = None,
+    decisions: Mapping[str, str] | None = None,
+    llm: LLMProvider | None = None,
+) -> RunState:
+    """Start a new run with the stored workflow path and inputs."""
+    settings = settings or get_settings()
+    previous = load_run(settings.runs_dir(), run_id)
+    source = previous.metadata.get("source")
+    if not source:
+        raise ConfigError(
+            f"Run {previous.run_id} has no stored workflow path. Cannot replay."
+        )
+    return run_workflow_file(
+        source,
+        inputs=previous.inputs,
+        dry_run=dry_run,
+        settings=settings,
+        llm=llm,
+        persist=persist,
+        extra_tools=extra_tools,
+        decisions=decisions,
+    )

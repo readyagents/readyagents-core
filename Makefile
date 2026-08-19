@@ -15,3 +15,4 @@ fmt:
 
 run-example:
 	readyagents run examples/calc_pipeline.yaml
+	readyagents run examples/approval_gate.yaml --approve gate

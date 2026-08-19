@@ -38,3 +38,24 @@ class TemplateError(ReadyAgentsError):
 
 class ToolError(ReadyAgentsError):
     """Builtin or MCP tool invocation failed."""
+
+
+class ApprovalRequired(ReadyAgentsError):
+    """An approval node is waiting for an explicit operator decision."""
+
+    def __init__(
+        self,
+        node_id: str,
+        run_id: str,
+        prompt: str,
+        *,
+        state: object | None = None,
+    ) -> None:
+        self.node_id = node_id
+        self.run_id = run_id
+        self.prompt = prompt
+        self.state = state
+        super().__init__(
+            f"Approval required at node '{node_id}' (run {run_id}). "
+            f"{prompt} Resume with: readyagents resume {run_id} --approve {node_id}"
+        )

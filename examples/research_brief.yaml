@@ -2,8 +2,10 @@ name: research_brief
 version: "1"
 description: >
   Plan a short research outline, then write a brief on a topic.
-  Default mode is LLM-only (no network). To fetch a URL first, set allow_http: true
-  and READYAGENTS_ALLOW_HTTP=1, then pass --input url=https://...
+  Default mode is LLM-only (no network). Dry-run without keys:
+  readyagents run examples/research_brief.yaml --dry-run --input topic=test
+  To fetch a URL first, set allow_http: true and READYAGENTS_ALLOW_HTTP=1,
+  then pass --input url=https://...
 
 inputs:
   topic: agent workflows

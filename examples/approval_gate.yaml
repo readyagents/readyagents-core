@@ -1,0 +1,34 @@
+name: approval_gate
+version: "1"
+description: >
+  Keyless human-in-the-loop smoke test. Compute a total, pause for an operator
+  decision, then stamp a receipt. No LLM, no API keys, no network.
+  Pause:  readyagents run examples/approval_gate.yaml
+  Resume: readyagents resume <run_id> --approve gate
+  One shot: readyagents run examples/approval_gate.yaml --approve gate
+
+start: add
+nodes:
+  - id: add
+    type: tool
+    tool: calc
+    arguments:
+      expression: "19 + 23"
+    output_key: total
+    next: gate
+
+  - id: gate
+    type: approval
+    prompt: "Release payment of {{total}}?"
+    then: receipt
+    else: denied
+
+  - id: receipt
+    type: transform
+    template: "approval_gate ok: paid {{total}}"
+    output_key: summary
+
+  - id: denied
+    type: transform
+    template: "approval_gate denied: {{total}}"
+    output_key: summary

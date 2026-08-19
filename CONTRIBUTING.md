@@ -16,6 +16,7 @@ pip install -e ".[dev]"
 make test
 make lint
 readyagents run examples/calc_pipeline.yaml
+readyagents run examples/approval_gate.yaml --approve gate
 ```
 
 Or:
@@ -26,6 +27,7 @@ ruff check src tests
 ```
 
 Tests must not use the network or real API keys. Mock LLM providers.
+Approval nodes must be driven with `--approve` / `--reject` (or `ExecutionContext.decisions`) — never a blocking prompt.
 
 ## Guidelines
 

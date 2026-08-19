@@ -3,6 +3,7 @@ version: "1"
 description: >
   Read a file from the workspace with the builtin read_file tool, then review it.
   Example: readyagents run examples/code_review.yaml --input path=examples/sample_code.py
+  Dry-run: readyagents run examples/code_review.yaml --dry-run
 
 inputs:
   path: examples/sample_code.py

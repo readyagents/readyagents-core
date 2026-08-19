@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from readyagents.errors import (
+    ApprovalRequired,
     ConfigError,
     LLMError,
     MCPError,
@@ -17,6 +18,7 @@ from readyagents.errors import (
 
 __all__ = [
     "__version__",
+    "ApprovalRequired",
     "ConfigError",
     "LLMError",
     "MCPError",

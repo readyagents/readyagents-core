@@ -46,8 +46,10 @@ If an agent node runs with no key, the CLI exits with a short `LLMError` telling
 | --- | --- |
 | `READYAGENTS_ALLOW_HTTP` | `1` / `true` enables builtin `http_get` |
 | `READYAGENTS_WORKSPACE` | Sandbox root for `read_file` / `write_file` (default: cwd) |
-| `READYAGENTS_HOME` | Artifact directory (default: `.readyagents`) |
-| `READYAGENTS_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `READYAGENTS_HOME` | Artifact directory (default: `.readyagents`). Run JSON lives in `$READYAGENTS_HOME/runs/` |
+| `READYAGENTS_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. Log lines include `run=` and `node=` |
+
+Inspect and resume those records with `readyagents runs list`, `readyagents runs show`, and `readyagents resume`.
 
 Workflow YAML may also set `allow_http: true` and `workspace:`. Either the env flag or the workflow flag enables HTTP.
 

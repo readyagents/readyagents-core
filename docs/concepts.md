@@ -21,6 +21,9 @@ A workflow is a YAML (or JSON) file with:
 | `tool` | Call a named builtin, pack, or MCP tool |
 | `condition` | Branch on a small expression |
 | `transform` | Template, JSON parse, or dotted-path extract |
+| `approval` | Human-in-the-loop gate; pauses until `--approve` / `--reject` |
+| `parallel` | Run independent branch nodes concurrently |
+| `include` | Run another workflow file and take its outputs |
 
 Packs may register additional node types.
 
@@ -48,7 +51,9 @@ retry:
   backoff_multiplier: 2
 ```
 
-Failures raise typed errors (`NodeError`, `LLMError`, `MCPError`, …) instead of a bare stack dump in the CLI.
+Failures raise typed errors (`NodeError`, `LLMError`, `MCPError`, `ApprovalRequired`, …) instead of a bare stack dump in the CLI.
+
+Run records are written after each node. Resume a paused or failed run with `readyagents resume <run_id>`. Inspect with `readyagents runs list` and `readyagents runs show <run_id>`. Structured logs include `run=<id>` and `node=<id>`.
 
 ## Extension: packs
 

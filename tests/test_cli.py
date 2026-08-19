@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -8,6 +9,16 @@ from readyagents.cli import app
 from readyagents.config import clear_settings_cache
 
 runner = CliRunner()
+
+
+def _run_id(text: str) -> str:
+    match = re.search(r"run_id:\s*([0-9a-f]{16,})", text)
+    if match:
+        return match.group(1)
+    match = re.search(r"Run ([0-9a-f]{16,}) —", text)
+    if match:
+        return match.group(1)
+    raise AssertionError(f"no run id in:\n{text}")
 
 
 def test_help() -> None:
@@ -20,7 +31,7 @@ def test_help() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.stdout
+    assert "0.2.0" in result.stdout
 
 
 def test_packs_none_installed() -> None:
@@ -58,6 +69,172 @@ def test_run_agent_workflow_without_keys_fails_byok(tmp_path, monkeypatch) -> No
     assert "BYOK" in text
     assert "OPENAI_API_KEY" in text
     clear_settings_cache()
+
+
+def test_help_lists_new_and_runs() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "new" in result.stdout
+    assert "runs" in result.stdout
+    assert "resume" in result.stdout
+
+
+def test_new_writes_starter_tree(tmp_path: Path) -> None:
+    dest = tmp_path / "my-flow"
+    result = runner.invoke(app, ["new", "my-flow", "--dest", str(dest)])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (dest / "workflow.yaml").is_file()
+    assert (dest / "README.md").is_file()
+    assert (dest / ".env.example").is_file()
+    workflow = (dest / "workflow.yaml").read_text(encoding="utf-8")
+    readme = (dest / "README.md").read_text(encoding="utf-8")
+    env = (dest / ".env.example").read_text(encoding="utf-8")
+    assert "type: approval" in workflow
+    assert "readyagents new" in readme or "readyagents run" in readme
+    assert "OPENAI_API_KEY=" in env
+    assert "sk-" not in env
+    from readyagents.workflow.runner import load_workflow
+
+    spec = load_workflow(dest / "workflow.yaml")
+    assert spec.start
+    assert any(n.type == "approval" for n in spec.nodes)
+    gated = runner.invoke(
+        app, ["run", str(dest / "workflow.yaml"), "--approve", "gate", "--no-persist"]
+    )
+    assert gated.exit_code == 0, gated.stdout + gated.stderr
+    assert "succeeded" in gated.stdout
+
+
+def test_approval_pauses_then_resume_cli(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    example = Path(__file__).resolve().parents[1] / "examples" / "approval_gate.yaml"
+    paused = runner.invoke(app, ["run", str(example)])
+    assert paused.exit_code == 2, paused.stdout + paused.stderr
+    text = paused.stdout + paused.stderr
+    assert "ApprovalRequired" in text or "Approval required" in text
+    listed = runner.invoke(app, ["runs", "list"])
+    assert listed.exit_code == 0, listed.stdout + listed.stderr
+    assert "approval_gate" in listed.stdout
+    run_id = _run_id(listed.stdout + paused.stdout)
+    shown = runner.invoke(app, ["runs", "show", run_id])
+    assert shown.exit_code == 0, shown.stdout + shown.stderr
+    assert run_id in shown.stdout
+    assert "add" in shown.stdout
+    resumed = runner.invoke(app, ["resume", run_id, "--approve", "gate"])
+    assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
+    assert "succeeded" in resumed.stdout
+    assert "approval_gate ok" in resumed.stdout
+    clear_settings_cache()
+
+
+def test_runs_list_show_after_calc(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    example = Path(__file__).resolve().parents[1] / "examples" / "calc_pipeline.yaml"
+    ran = runner.invoke(app, ["run", str(example)])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    listed = runner.invoke(app, ["runs", "list"])
+    assert listed.exit_code == 0, listed.stdout
+    assert "calc_pipeline" in listed.stdout
+    run_id = _run_id(listed.stdout + ran.stdout)
+    shown = runner.invoke(app, ["runs", "show", run_id])
+    assert shown.exit_code == 0, shown.stdout
+    assert "add" in shown.stdout
+    assert "stamp" in shown.stdout
+    inspect = runner.invoke(app, ["runs", "inspect", run_id])
+    assert inspect.exit_code == 0
+    assert run_id in inspect.stdout
+    listed_json = runner.invoke(app, ["runs", "list", "--json"])
+    assert listed_json.exit_code == 0, listed_json.stdout
+    assert run_id in listed_json.stdout
+    assert '"workflow"' in listed_json.stdout
+    shown_json = runner.invoke(app, ["runs", "show", run_id, "--json"])
+    assert shown_json.exit_code == 0, shown_json.stdout
+    assert run_id in shown_json.stdout
+    assert "node_results" in shown_json.stdout
+    replayed = runner.invoke(app, ["runs", "replay", run_id])
+    assert replayed.exit_code == 0, replayed.stdout + replayed.stderr
+    assert "succeeded" in replayed.stdout
+    assert "calc_pipeline ok" in replayed.stdout
+    clear_settings_cache()
+
+
+def test_new_template_basic(tmp_path: Path) -> None:
+    dest = tmp_path / "basic-flow"
+    result = runner.invoke(app, ["new", "basic-flow", "--dest", str(dest), "--template", "basic"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    text = (dest / "workflow.yaml").read_text(encoding="utf-8")
+    assert "type: approval" not in text
+    ran = runner.invoke(app, ["run", str(dest / "workflow.yaml"), "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "succeeded" in ran.stdout
+
+
+def test_new_template_research(tmp_path: Path) -> None:
+    dest = tmp_path / "research-flow"
+    result = runner.invoke(
+        app, ["new", "research-flow", "--dest", str(dest), "--template", "research"]
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    wf = dest / "workflow.yaml"
+    assert "type: parallel" in wf.read_text(encoding="utf-8")
+    ran = runner.invoke(app, ["run", str(wf), "--approve", "publish", "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "succeeded" in ran.stdout
+    assert "published" in ran.stdout
+
+
+def test_new_unknown_template(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app, ["new", "x", "--dest", str(tmp_path / "x"), "--template", "nope"]
+    )
+    assert result.exit_code == 1
+    assert "Unknown template" in result.stdout + result.stderr
+
+
+def test_include_demo_cli() -> None:
+    result = runner.invoke(
+        app, ["run", "examples/include_demo.yaml", "--input", "n=7", "--no-persist"]
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "include_demo ok: 17" in result.stdout
+
+
+def test_fanout_gate_oneshot() -> None:
+    result = runner.invoke(
+        app, ["run", "examples/fanout_gate.yaml", "--approve", "gate", "--no-persist"]
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "fanout_gate ok" in result.stdout
+
+
+def test_list_status_filter(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    example = Path(__file__).resolve().parents[1] / "examples" / "calc_pipeline.yaml"
+    ran = runner.invoke(app, ["run", str(example)])
+    assert ran.exit_code == 0, ran.stdout
+    listed = runner.invoke(app, ["runs", "list", "--status", "succeeded", "--json"])
+    assert listed.exit_code == 0
+    assert "calc_pipeline" in listed.stdout
+    empty = runner.invoke(app, ["runs", "list", "--status", "paused", "--json"])
+    assert empty.exit_code == 0
+    assert empty.stdout.strip() == "[]" or "[]" in empty.stdout
+    clear_settings_cache()
+
+
+def test_dry_run_support_triage() -> None:
+    result = runner.invoke(
+        app,
+        ["run", "examples/support_triage.yaml", "--dry-run", "--no-persist"],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "succeeded" in result.stdout
+    assert "[dry-run]" in result.stdout
 
 
 def test_dry_run_research_brief() -> None:

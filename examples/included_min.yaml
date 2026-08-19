@@ -1,0 +1,13 @@
+name: included_min
+version: "1"
+description: Tiny keyless sub-workflow used by include_demo.yaml
+inputs:
+  n: 3
+start: add
+nodes:
+  - id: add
+    type: tool
+    tool: calc
+    arguments:
+      expression: "{{n}} + 10"
+    output_key: total

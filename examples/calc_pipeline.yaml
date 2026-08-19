@@ -3,6 +3,7 @@ version: "1"
 description: >
   Smoke test — builtin tools and transforms only. No LLM, no API keys, no network.
   Run: readyagents run examples/calc_pipeline.yaml
+  Then: readyagents runs list && readyagents runs show <run_id>
 
 start: add
 nodes:

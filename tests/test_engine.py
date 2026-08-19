@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from tests.conftest import MockLLM
 
-from readyagents.errors import NodeError, TemplateError
+from readyagents.errors import ApprovalRequired, NodeError, TemplateError
 from readyagents.tools import FunctionTool, ToolRegistry
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
@@ -145,6 +145,85 @@ def test_tool_transform_condition_and_retry() -> None:
     assert all(r.node_id != "bad" for r in state.results)
 
 
+def test_approval_pauses_without_decision() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "hitl",
+            "start": "prep",
+            "nodes": [
+                {"id": "prep", "type": "transform", "template": "42", "output_key": "n", "next": "gate"},
+                {
+                    "id": "gate",
+                    "type": "approval",
+                    "prompt": "Release {{n}}?",
+                    "then": "ok",
+                    "else": "no",
+                },
+                {"id": "ok", "type": "transform", "template": "yes {{n}}", "output_key": "summary"},
+                {"id": "no", "type": "transform", "template": "nope", "output_key": "summary"},
+            ],
+        }
+    )
+    with pytest.raises(ApprovalRequired) as exc:
+        run_workflow(spec, {}, _ctx(spec))
+    assert exc.value.node_id == "gate"
+    assert "Release 42?" in exc.value.prompt
+    assert exc.value.state is not None
+    assert exc.value.state.status == "paused"
+    assert exc.value.state.pending_node == "gate"
+    assert "prep" in {r.node_id for r in exc.value.state.results}
+    assert all(r.node_id != "ok" for r in exc.value.state.results)
+
+
+def test_approval_continues_when_approved() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "hitl-ok",
+            "start": "prep",
+            "nodes": [
+                {"id": "prep", "type": "transform", "template": "7", "output_key": "n", "next": "gate"},
+                {
+                    "id": "gate",
+                    "type": "approval",
+                    "prompt": "go {{n}}?",
+                    "then": "ok",
+                    "else": "no",
+                },
+                {"id": "ok", "type": "transform", "template": "approved {{n}}", "output_key": "summary"},
+                {"id": "no", "type": "transform", "template": "denied", "output_key": "summary"},
+            ],
+        }
+    )
+    ctx = ExecutionContext(spec, ToolRegistry(), decisions={"gate": "approve"})
+    state = run_workflow(spec, {}, ctx)
+    assert state.status == "succeeded"
+    assert state.output_keys["summary"] == "approved 7"
+    assert all(r.node_id != "no" for r in state.results)
+
+
+def test_approval_reject_takes_else() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "hitl-no",
+            "nodes": [
+                {
+                    "id": "gate",
+                    "type": "approval",
+                    "prompt": "sure?",
+                    "then": "ok",
+                    "else": "no",
+                },
+                {"id": "ok", "type": "transform", "template": "yes", "output_key": "summary"},
+                {"id": "no", "type": "transform", "template": "denied", "output_key": "summary"},
+            ],
+        }
+    )
+    ctx = ExecutionContext(spec, ToolRegistry(), decisions={"gate": "reject"})
+    state = run_workflow(spec, {}, ctx)
+    assert state.status == "succeeded"
+    assert state.output_keys["summary"] == "denied"
+
+
 def test_retry_then_succeed() -> None:
     hits = {"n": 0}
 
@@ -217,6 +296,28 @@ def test_agent_uses_llm() -> None:
     state = run_workflow(spec, spec.input_defaults(), _ctx(spec, llm=llm))
     assert state.output_keys["text"] == "brief-text"
     assert "tea" in llm.calls[0][-1].content
+
+
+def test_dry_run_parse_json_does_not_crash() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "dry-json",
+            "nodes": [
+                {"id": "a", "type": "agent", "prompt": "json please", "output_key": "raw", "next": "p"},
+                {
+                    "id": "p",
+                    "type": "transform",
+                    "source": "raw",
+                    "parse_json": True,
+                    "output_key": "parsed",
+                },
+            ],
+        }
+    )
+    ctx = ExecutionContext(spec, ToolRegistry(), dry_run=True, llm=MockLLM("unused"))
+    state = run_workflow(spec, {}, ctx)
+    assert state.status == "succeeded"
+    assert state.output_keys["parsed"] == {"dry_run": True}
 
 
 def test_dry_run_skips_llm() -> None:

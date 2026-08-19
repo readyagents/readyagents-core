@@ -1,0 +1,39 @@
+name: fanout_gate
+version: "1"
+description: >
+  Parallel fan-out of two builtin tools, then a human approval gate.
+  Pause:  readyagents run examples/fanout_gate.yaml
+  Resume: readyagents resume <run_id> --approve gate
+  One shot: readyagents run examples/fanout_gate.yaml --approve gate
+
+start: fan
+nodes:
+  - id: fan
+    type: parallel
+    output_key: parts
+    next: gate
+    branches:
+      - id: left
+        type: tool
+        tool: calc
+        arguments:
+          expression: "10 + 32"
+      - id: right
+        type: tool
+        tool: now
+
+  - id: gate
+    type: approval
+    prompt: "Ship {{parts.left}} computed at {{parts.right}}?"
+    then: ok
+    else: hold
+
+  - id: ok
+    type: transform
+    template: "fanout_gate ok: {{parts.left}}"
+    output_key: summary
+
+  - id: hold
+    type: transform
+    template: "fanout_gate held: {{parts.left}}"
+    output_key: summary

@@ -43,7 +43,31 @@ ReadyAgents never ships with vendor keys. You bring your own.
 readyagents run examples/calc_pipeline.yaml
 ```
 
-This uses `calc`, `now`, `json_get`, a transform, and a condition. It writes a run record under `.readyagents/runs/` (gitignored).
+This uses `calc`, `now`, `json_get`, a transform, and a condition. It writes a run record under `.readyagents/runs/` (gitignored) after each node.
+
+```bash
+readyagents runs list
+readyagents runs show <run_id>
+```
+
+Scaffold a local starter (workflow + README + `.env.example`):
+
+```bash
+readyagents new my-flow
+readyagents new my-flow --template basic
+readyagents run my-flow/workflow.yaml --approve gate
+```
+
+Human-in-the-loop (no keys):
+
+```bash
+readyagents run examples/approval_gate.yaml --approve gate
+# or pause, then:
+readyagents run examples/approval_gate.yaml
+readyagents resume <run_id> --approve gate
+readyagents run examples/fanout_gate.yaml --approve gate
+readyagents run examples/include_demo.yaml
+```
 
 ## LLM examples
 

@@ -59,6 +59,13 @@ def test_unknown_next_rejected() -> None:
         )
 
 
+def test_approval_requires_prompt() -> None:
+    with pytest.raises(ValidationError):
+        WorkflowSpec.model_validate(
+            {"name": "x", "nodes": [{"id": "g", "type": "approval", "then": "g"}]}
+        )
+
+
 def test_condition_requires_when() -> None:
     with pytest.raises(ValidationError):
         WorkflowSpec.model_validate(
@@ -106,6 +113,10 @@ def test_example_workflows_validate(examples_dir: Path) -> None:
         "research_brief.yaml",
         "support_triage.yaml",
         "code_review.yaml",
+        "approval_gate.yaml",
+        "fanout_gate.yaml",
+        "include_demo.yaml",
+        "included_min.yaml",
     ):
         spec = load_workflow(examples_dir / name)
         assert spec.nodes
