@@ -136,8 +136,6 @@ pip install -e ".[all]"
 
 Then `cp .env.example .env` and paste your own keys. Core workflows that only use builtin tools do **not** need extras, keys, or Node.js.
 
-Not on PyPI. Do not publish until that is opened.
-
 ## What is not in core
 
 These belong in **Premium Packs**, not this repository:
