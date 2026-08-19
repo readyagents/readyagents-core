@@ -40,7 +40,7 @@ readyagents run examples/approval_gate.yaml --approve gate
 
 ### Durable local runs
 
-JSON under `.readyagents/runs/<id>.json`, written atomically after each node.
+JSON under `.readyagents/runs/<run_id>.json`, written atomically after each node.
 
 ```bash
 readyagents runs list
