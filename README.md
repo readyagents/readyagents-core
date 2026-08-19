@@ -38,7 +38,7 @@ readyagents run examples/calc_pipeline.yaml
 readyagents runs list
 readyagents runs report <run_id>
 
-readyagents new my-flow --template pipeline
+readyagents new my-flow
 readyagents run examples/approval_gate.yaml --approve gate
 readyagents run examples/composed_gate.yaml --approve gate
 ```

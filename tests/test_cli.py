@@ -89,7 +89,7 @@ def test_new_writes_starter_tree(tmp_path: Path) -> None:
     workflow = (dest / "workflow.yaml").read_text(encoding="utf-8")
     readme = (dest / "README.md").read_text(encoding="utf-8")
     env = (dest / ".env.example").read_text(encoding="utf-8")
-    assert "type: approval" in workflow
+    assert "type: approval" not in workflow
     assert "readyagents new" in readme or "readyagents run" in readme
     assert "OPENAI_API_KEY=" in env
     assert "sk-" not in env
@@ -97,7 +97,19 @@ def test_new_writes_starter_tree(tmp_path: Path) -> None:
 
     spec = load_workflow(dest / "workflow.yaml")
     assert spec.start
-    assert any(n.type == "approval" for n in spec.nodes)
+    assert not any(n.type == "approval" for n in spec.nodes)
+    ran = runner.invoke(app, ["run", str(dest / "workflow.yaml"), "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "succeeded" in ran.stdout
+
+
+def test_new_template_approval(tmp_path: Path) -> None:
+    dest = tmp_path / "gated"
+    result = runner.invoke(
+        app, ["new", "gated", "--dest", str(dest), "--template", "approval"]
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "type: approval" in (dest / "workflow.yaml").read_text(encoding="utf-8")
     gated = runner.invoke(
         app, ["run", str(dest / "workflow.yaml"), "--approve", "gate", "--no-persist"]
     )

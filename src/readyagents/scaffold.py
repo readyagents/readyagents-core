@@ -267,10 +267,10 @@ No API keys required. Add `type: agent` nodes and keys later.
 }
 
 
-def create_project(dest: Path, *, name: str, template: str = "approval") -> list[Path]:
+def create_project(dest: Path, *, name: str, template: str = "pipeline") -> list[Path]:
     dest = dest.expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
-    kind = (template or "approval").strip().lower()
+    kind = (template or "pipeline").strip().lower()
     if kind not in _WORKFLOWS:
         raise ConfigError(
             f"Unknown template '{template}'. Choose one of: {', '.join(TEMPLATES)}"
