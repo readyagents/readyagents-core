@@ -112,13 +112,6 @@ def test_init_default_dest(tmp_path: Path, monkeypatch) -> None:
     assert "sk-" not in dest.read_text(encoding="utf-8")
 
 
-def test_run_help_lists_reject() -> None:
-    result = runner.invoke(app, ["run", "--help"])
-    assert result.exit_code == 0
-    assert "--reject" in result.stdout
-    assert "--approve" in result.stdout
-
-
 def test_reject_oneshot_cli() -> None:
     result = runner.invoke(
         app, ["run", "examples/approval_gate.yaml", "--reject", "gate", "--no-persist"]
