@@ -6,6 +6,7 @@ import pytest
 
 from readyagents.config import Settings, clear_settings_cache, load_settings, require_api_key
 from readyagents.errors import LLMError
+from readyagents.llm.registry import get_provider
 
 
 def test_env_then_dotenv_then_env_ai(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,6 +48,21 @@ def test_require_api_key_message() -> None:
     msg = str(exc.value)
     assert "OPENAI_API_KEY" in msg
     assert "BYOK" in msg
+
+
+def test_get_provider_missing_key_tells_user_to_set_key() -> None:
+    settings = Settings(  # type: ignore[call-arg]
+        openai_api_key=None,
+        anthropic_api_key=None,
+        openai_compat_api_key=None,
+        _env_file=(),
+    )
+    with pytest.raises(LLMError) as exc:
+        get_provider("openai:gpt-4o-mini", settings=settings)
+    msg = str(exc.value)
+    assert "BYOK" in msg
+    assert "OPENAI_API_KEY" in msg
+    assert "Set" in msg or "set" in msg
 
 
 def test_readyagents_prefixed_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -36,8 +36,8 @@ def _create_server(name: str) -> Any:
         ) from exc
 
 
-def serve_stdio(*, allow_http: bool | None = None, workspace: Path | None = None) -> None:
-    """Run a stdio MCP server exposing builtin tools."""
+def construct_server(*, allow_http: bool | None = None, workspace: Path | None = None) -> Any:
+    """Build an MCP server that exposes builtin tools. Does not start a transport."""
     if not mcp_available():
         raise MCPError("MCP extra is not installed. Run: pip install 'readyagents[mcp]'")
 
@@ -46,7 +46,16 @@ def serve_stdio(*, allow_http: bool | None = None, workspace: Path | None = None
     root = workspace or settings.workspace_path()
     tools = {t.name: t for t in builtin_tools(allow_http=allow, workspace=root)}
     server = _create_server("readyagents")
+    _register_server_tools(server, tools)
+    return server
 
+
+def serve_stdio(*, allow_http: bool | None = None, workspace: Path | None = None) -> None:
+    """Run a stdio MCP server exposing builtin tools."""
+    construct_server(allow_http=allow_http, workspace=workspace).run(transport="stdio")
+
+
+def _register_server_tools(server: Any, tools: dict[str, Any]) -> None:
     @server.tool(name="now", description=tools["now"].description)
     def now() -> str:
         return str(tools["now"].run())
@@ -88,5 +97,3 @@ def serve_stdio(*, allow_http: bool | None = None, workspace: Path | None = None
             raise ValueError("inputs_json must be a JSON object")
         state = run_workflow_file(Path(path), inputs=data)
         return json.dumps(state.to_record(), ensure_ascii=False)
-
-    server.run(transport="stdio")

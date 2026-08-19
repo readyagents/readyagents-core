@@ -7,6 +7,7 @@ from readyagents.packs.protocol import BasePack
 from readyagents.tools import FunctionTool
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
+from readyagents.workflow.runner import run_workflow_file
 from readyagents.workflow.schema import WorkflowSpec
 
 
@@ -38,6 +39,31 @@ def test_core_has_no_builtin_packs() -> None:
 def test_collect_tools_from_fake_pack() -> None:
     registry = collect_pack_tools([FakePack()])
     assert registry.get("ping").run() == "pong"
+
+
+def test_run_workflow_file_merges_pack_tools_and_nodes(tmp_path, tmp_settings, monkeypatch) -> None:
+    path = tmp_path / "packwf.yaml"
+    path.write_text(
+        """
+name: pack-merge
+start: ping
+nodes:
+  - id: ping
+    type: tool
+    tool: ping
+    output_key: pong
+    next: echo
+  - id: echo
+    type: echo
+    output_key: echoed
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("readyagents.workflow.runner.discover_packs", lambda: [FakePack()])
+    state = run_workflow_file(path, settings=tmp_settings, persist=False)
+    assert state.status == "succeeded"
+    assert state.output_keys["pong"] == "pong"
+    assert state.output_keys["echoed"] == "echo:echo"
 
 
 def test_pack_node_handler() -> None:

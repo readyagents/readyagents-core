@@ -83,6 +83,68 @@ def test_missing_template_var() -> None:
     assert isinstance(exc.value.__cause__, TemplateError) or "Missing template variable" in msg
 
 
+def test_tool_transform_condition_and_retry() -> None:
+    hits = {"n": 0}
+
+    def flaky() -> int:
+        hits["n"] += 1
+        if hits["n"] < 2:
+            raise RuntimeError("transient")
+        return 7
+
+    tools = ToolRegistry()
+    tools.register(FunctionTool(name="flaky", description="x", handler=flaky))
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "combo",
+            "start": "t",
+            "nodes": [
+                {
+                    "id": "t",
+                    "type": "tool",
+                    "tool": "flaky",
+                    "retry": {"max_attempts": 3, "backoff_seconds": 0},
+                    "output_key": "n",
+                    "next": "xf",
+                },
+                {
+                    "id": "xf",
+                    "type": "transform",
+                    "template": "value={{n}}",
+                    "output_key": "label",
+                    "next": "c",
+                },
+                {
+                    "id": "c",
+                    "type": "condition",
+                    "when": "n == 7",
+                    "then": "ok",
+                    "else": "bad",
+                },
+                {
+                    "id": "ok",
+                    "type": "transform",
+                    "template": "combo ok {{label}}",
+                    "output_key": "summary",
+                },
+                {
+                    "id": "bad",
+                    "type": "transform",
+                    "template": "combo bad",
+                    "output_key": "summary",
+                },
+            ],
+        }
+    )
+    state = run_workflow(spec, {}, _ctx(spec, tools=tools))
+    assert state.status == "succeeded"
+    assert hits["n"] == 2
+    assert state.output_keys["n"] == 7
+    assert state.output_keys["label"] == "value=7"
+    assert state.output_keys["summary"] == "combo ok value=7"
+    assert all(r.node_id != "bad" for r in state.results)
+
+
 def test_retry_then_succeed() -> None:
     hits = {"n": 0}
 

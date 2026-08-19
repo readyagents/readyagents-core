@@ -58,6 +58,13 @@ def test_http_disabled_by_default(tmp_path: Path) -> None:
         registry.get("http_get").run(url="https://example.com")
 
 
+def test_default_registry_includes_builtins(tmp_path: Path) -> None:
+    registry = default_registry(allow_http=False, workspace=tmp_path)
+    for name in ("now", "calc", "json_get", "read_file", "write_file", "http_get"):
+        assert name in registry.names()
+    assert registry.get("calc").run(expression="1 + 2 * 3") == 7
+
+
 def test_calc_pipeline_example(examples_dir: Path, tmp_settings) -> None:
     path = examples_dir / "calc_pipeline.yaml"
     state = run_workflow_file(path, settings=tmp_settings, persist=True)
