@@ -4,6 +4,8 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- Failed runs print the node timeline, `run_id`, and a `resume` hint; `run` / `resume` / `replay` accept `--json` (stdout, no Rich markup)
+- Resume applies `--input` overrides to stored inputs (retry a failed node with new values)
 - File tools refuse workspace escapes (absolute paths, `..`, symlinks) and write atomically; `include` paths stay under the parent workflow directory
 - Implicit default model uses the BYOK provider that has a key (explicit `model:` is unchanged)
 - `readyagents new` defaults to the keyless `pipeline` template (`--template approval` still works)

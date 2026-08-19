@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, NoReturn
 
 import typer
 from rich.console import Console
@@ -202,8 +203,14 @@ def run(
         "--resume",
         help="Resume this run id instead of starting a new run.",
     ),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the run record as JSON on stdout (no tables).",
+    ),
 ) -> None:
     """Execute a workflow."""
+    persist = not no_persist
     try:
         parsed = parse_input_pairs(inputs)
         decisions = build_decisions(approve, reject)
@@ -213,7 +220,7 @@ def run(
                 path=path,
                 inputs=parsed or None,
                 dry_run=dry_run,
-                persist=not no_persist,
+                persist=persist,
                 decisions=decisions,
             )
         else:
@@ -221,23 +228,12 @@ def run(
                 path,
                 inputs=parsed,
                 dry_run=dry_run,
-                persist=not no_persist,
+                persist=persist,
                 decisions=decisions,
             )
-    except ApprovalRequired as exc:
-        _print_paused(exc)
-        raise typer.Exit(code=2) from exc
     except ReadyAgentsError as exc:
-        _fail(exc)
-        return
-
-    _print_run(state)
-    if state.status != "succeeded":
-        raise typer.Exit(code=1)
-    console.print("[green]succeeded[/green]")
-    _print_usage(state)
-    if state.output_keys:
-        console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
+        _emit_run_exception(exc, as_json=as_json, persist=persist)
+    _emit_run(state, as_json=as_json)
 
 
 @app.command("resume")
@@ -260,8 +256,14 @@ def resume_cmd(
     no_persist: bool = typer.Option(False, "--no-persist"),
     approve: list[str] = typer.Option([], "--approve"),
     reject: list[str] = typer.Option([], "--reject"),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the run record as JSON on stdout (no tables).",
+    ),
 ) -> None:
     """Resume a paused or failed run from the last successful node."""
+    persist = not no_persist
     try:
         parsed = parse_input_pairs(inputs)
         state = resume_run(
@@ -269,22 +271,12 @@ def resume_cmd(
             path=workflow,
             inputs=parsed or None,
             dry_run=dry_run,
-            persist=not no_persist,
+            persist=persist,
             decisions=build_decisions(approve, reject),
         )
-    except ApprovalRequired as exc:
-        _print_paused(exc)
-        raise typer.Exit(code=2) from exc
     except ReadyAgentsError as exc:
-        _fail(exc)
-        return
-    _print_run(state)
-    if state.status != "succeeded":
-        raise typer.Exit(code=1)
-    console.print("[green]succeeded[/green]")
-    _print_usage(state)
-    if state.output_keys:
-        console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
+        _emit_run_exception(exc, as_json=as_json, persist=persist)
+    _emit_run(state, as_json=as_json)
 
 
 @app.command("packs")
@@ -336,7 +328,7 @@ def runs_list(
             }
             for s in found
         ]
-        console.print(json.dumps(payload, indent=2, ensure_ascii=False))
+        _print_json(payload)
         return
     if not found:
         console.print(f"No runs in {settings.runs_dir()}")
@@ -405,28 +397,24 @@ def runs_replay(
     no_persist: bool = typer.Option(False, "--no-persist"),
     approve: list[str] = typer.Option([], "--approve"),
     reject: list[str] = typer.Option([], "--reject"),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the run record as JSON on stdout (no tables).",
+    ),
 ) -> None:
     """Start a new run using the stored workflow path and inputs."""
+    persist = not no_persist
     try:
         state = replay_run(
             run_id,
             dry_run=dry_run,
-            persist=not no_persist,
+            persist=persist,
             decisions=build_decisions(approve, reject),
         )
-    except ApprovalRequired as exc:
-        _print_paused(exc)
-        raise typer.Exit(code=2) from exc
     except ReadyAgentsError as exc:
-        _fail(exc)
-        return
-    _print_run(state)
-    if state.status != "succeeded":
-        raise typer.Exit(code=1)
-    console.print("[green]succeeded[/green]")
-    _print_usage(state)
-    if state.output_keys:
-        console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
+        _emit_run_exception(exc, as_json=as_json, persist=persist)
+    _emit_run(state, as_json=as_json)
 
 
 @mcp_app.command("serve")
@@ -449,7 +437,7 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
         _fail(exc)
         return
     if as_json:
-        console.print(json.dumps(state.to_record(), indent=2, ensure_ascii=False))
+        _print_json(state.to_record())
         return
     console.print(f"run_id: {state.run_id}")
     console.print(f"workflow: {state.workflow_name}")
@@ -462,6 +450,87 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
         console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
     if state.inputs:
         console.print(Panel(escape(_preview(state.inputs, limit=2000)), title="Inputs"))
+
+
+def _print_json(payload: object) -> None:
+    """Write JSON to stdout without Rich markup (values may contain `[...]`)."""
+    typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _state_from_exc(exc: BaseException) -> RunState | None:
+    state = getattr(exc, "state", None)
+    return state if isinstance(state, RunState) else None
+
+
+def _emit_run(state: RunState, *, as_json: bool) -> None:
+    if as_json:
+        _print_json(state.to_record())
+    else:
+        _print_run(state)
+        if state.status == "succeeded":
+            console.print("[green]succeeded[/green]")
+            _print_usage(state)
+            if state.output_keys:
+                console.print(
+                    Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs")
+                )
+        else:
+            console.print(f"[red]{state.status}[/red]")
+            console.print(f"run_id: {state.run_id}")
+    if state.status != "succeeded":
+        raise typer.Exit(code=1)
+
+
+def _emit_run_exception(exc: ReadyAgentsError, *, as_json: bool, persist: bool) -> NoReturn:
+    """Print a paused or failed run (JSON or tables) and exit. Never returns."""
+    if isinstance(exc, ApprovalRequired):
+        state = _state_from_exc(exc)
+        if as_json:
+            payload: dict[str, Any] = {
+                "error": type(exc).__name__,
+                "message": str(exc),
+                "run_id": exc.run_id,
+                "node_id": exc.node_id,
+                "prompt": exc.prompt,
+                "status": "paused",
+            }
+            if state is not None:
+                payload["run"] = state.to_record()
+            _print_json(payload)
+        else:
+            _print_paused(exc)
+        raise typer.Exit(code=2) from exc
+
+    state = _state_from_exc(exc)
+    run_id = getattr(exc, "run_id", None) or (state.run_id if state is not None else None)
+    if as_json:
+        payload = {
+            "error": type(exc).__name__,
+            "message": str(exc),
+            "run_id": run_id,
+            "status": state.status if state is not None else "failed",
+        }
+        if state is not None:
+            payload["run"] = state.to_record()
+        _print_json(payload)
+        raise typer.Exit(code=1) from exc
+
+    if state is not None:
+        _print_run(state)
+        err_console.print(f"[red]{type(exc).__name__}:[/red] {exc}")
+        console.print(f"run_id: {state.run_id}  status: {state.status}")
+        if persist:
+            cmd = f"readyagents resume {state.run_id}"
+            pending = state.pending_node
+            if pending:
+                console.print(
+                    f"Resume: [cyan]{cmd}[/cyan]  (retry node [bold]{escape(pending)}[/bold])"
+                )
+            else:
+                console.print(f"Resume: [cyan]{cmd}[/cyan]")
+        raise typer.Exit(code=1) from exc
+
+    _fail(exc)
 
 
 def _print_usage(state: RunState) -> None:
@@ -502,7 +571,7 @@ def _preview(value: object, limit: int = 160) -> str:
     return text
 
 
-def _fail(exc: BaseException) -> None:
+def _fail(exc: BaseException) -> NoReturn:
     err_console.print(f"[red]{type(exc).__name__}:[/red] {exc}")
     raise typer.Exit(code=1) from exc
 

@@ -6,6 +6,9 @@ from __future__ import annotations
 class ReadyAgentsError(Exception):
     """Base error for all ReadyAgents failures."""
 
+    run_id: str | None = None
+    state: object | None = None
+
 
 class ConfigError(ReadyAgentsError):
     """Invalid configuration, missing settings, or unreadable files."""

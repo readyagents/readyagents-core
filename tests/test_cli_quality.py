@@ -147,6 +147,134 @@ def test_mcp_help_lists_serve() -> None:
     assert "serve" in result.stdout
 
 
+def _json_from_cli(text: str) -> object:
+    import json as json_mod
+
+    for i, ch in enumerate(text):
+        if ch in "{[":
+            return json_mod.loads(text[i:])
+    raise AssertionError(f"no JSON in:\n{text}")
+
+
+def test_failed_run_prints_timeline_and_resume(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    wf = tmp_path / "boom.yaml"
+    wf.write_text(
+        """
+name: boom
+inputs:
+  expr: "1 / 0"
+nodes:
+  - id: prep
+    type: transform
+    template: "start"
+    output_key: tag
+    next: go
+  - id: go
+    type: tool
+    tool: calc
+    arguments:
+      expression: "{{expr}}"
+    output_key: n
+""",
+        encoding="utf-8",
+    )
+    failed = runner.invoke(app, ["run", str(wf)])
+    assert failed.exit_code == 1, failed.stdout + failed.stderr
+    text = failed.stdout + failed.stderr
+    assert "NodeError" in text
+    assert "division by zero" in text
+    assert "prep" in failed.stdout
+    assert "go" in failed.stdout
+    assert "run_id:" in text
+    assert "readyagents resume" in text
+    run_id = _run_id(text)
+    resumed = runner.invoke(app, ["resume", run_id, "--input", "expr=2 + 2"])
+    assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
+    assert "succeeded" in resumed.stdout
+    assert "4" in resumed.stdout
+    clear_settings_cache()
+
+
+def test_run_json_success() -> None:
+    result = runner.invoke(
+        app, ["run", "examples/calc_pipeline.yaml", "--json", "--no-persist"]
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["status"] == "succeeded"
+    assert data["workflow"] == "calc_pipeline"
+    assert "run_id" in data
+    assert "sum" in data.get("output_keys") or "sum" in data.get("outputs", {})
+
+
+def test_run_json_failed(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    wf = tmp_path / "boom.yaml"
+    wf.write_text(
+        """
+name: boom
+nodes:
+  - id: go
+    type: tool
+    tool: calc
+    arguments:
+      expression: "1 / 0"
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["run", str(wf), "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["error"] == "NodeError"
+    assert data["status"] == "failed"
+    assert data["run_id"]
+    assert isinstance(data.get("run"), dict)
+    assert data["run"]["status"] == "failed"
+    assert data["run"]["pending_node"] == "go"
+    clear_settings_cache()
+
+
+def test_run_json_paused_approval() -> None:
+    result = runner.invoke(
+        app, ["run", "examples/approval_gate.yaml", "--json", "--no-persist"]
+    )
+    assert result.exit_code == 2, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["error"] == "ApprovalRequired"
+    assert data["status"] == "paused"
+    assert data["node_id"] == "gate"
+    assert data["run_id"]
+    assert data.get("run", {}).get("status") == "paused"
+
+
+def test_run_json_preserves_dry_run_markup() -> None:
+    result = runner.invoke(
+        app,
+        ["run", "examples/support_triage.yaml", "--dry-run", "--json", "--no-persist"],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    blob = result.stdout
+    assert "[dry-run]" in blob
+    # Rich markup would eat `[dry-run]` as a tag; raw JSON must keep the brackets.
+    assert "dry-run" in blob
+
+
+def test_run_help_lists_json() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--json" in result.stdout
+
+
 def test_mcp_serve_invokes_stdio(monkeypatch) -> None:
     # Live `mcp serve` blocks on stdio (server.run(transport="stdio")). Patch the
     # transport so the CLI wiring is covered without hanging the suite.

@@ -181,8 +181,31 @@ def test_timeout_on_slow_tool() -> None:
             "nodes": [{"id": "s", "type": "tool", "tool": "slow", "timeout_seconds": 0.05}],
         }
     )
-    with pytest.raises(NodeError, match="timed out"):
+    with pytest.raises(NodeError, match="timed out") as exc:
         run_workflow(spec, {}, ExecutionContext(spec, tools))
+    msg = str(exc.value)
+    assert msg.count("Node 's':") == 1
+    assert exc.value.run_id
+    assert exc.value.state is not None
+    assert getattr(exc.value.state, "status", None) == "failed"
+    assert getattr(exc.value.state, "pending_node", None) == "s"
+
+
+def test_failed_run_exception_carries_state() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "boom",
+            "nodes": [{"id": "t", "type": "tool", "tool": "missing"}],
+        }
+    )
+    with pytest.raises(NodeError) as exc:
+        run_workflow(spec, {}, ExecutionContext(spec, ToolRegistry()))
+    assert "Unknown tool" in str(exc.value)
+    assert exc.value.run_id
+    assert exc.value.state is not None
+    loaded = exc.value.state
+    assert getattr(loaded, "status", None) == "failed"
+    assert getattr(loaded, "run_id", None) == exc.value.run_id
 
 
 def test_dry_run_records_token_estimate() -> None:

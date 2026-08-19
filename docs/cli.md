@@ -52,9 +52,12 @@ readyagents run examples/research_brief.yaml --no-persist
 | `--approve NODE` | Supply an approval-node decision (repeatable) |
 | `--reject NODE` | Reject an approval node (repeatable) |
 | `--resume RUN_ID` | Continue a paused/failed run instead of starting fresh |
+| `--json` | Print the run record as JSON on stdout (no tables; scripts/CI) |
 | `--log-level` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 
 Exit code `1` on validation or execution errors. Exit code `2` when an **approval** node pauses for a decision. The CLI prints `ErrorClass: message` rather than a full traceback. Logs include `run=<id>` and `node=<id>`.
+
+Failed runs print the **node timeline**, `run_id`, and a `readyagents resume RUN_ID` hint (same idea as approval pauses). `--json` on pause/failure is an error envelope (`error`, `message`, `run_id`, `run`) so scripts can still recover the record. `resume` and `runs replay` accept `--json` too. JSON is written without Rich markup, so values like `[dry-run]` stay intact.
 
 State is persisted after **each** successful node (unless `--no-persist`).
 
@@ -65,6 +68,7 @@ Resume a paused or failed run from the last successful node. Uses the workflow p
 ```bash
 readyagents resume abcdef --approve gate
 readyagents resume abcdef --workflow examples/approval_gate.yaml --reject gate
+readyagents resume abcdef --json
 ```
 
 ## `readyagents runs list`

@@ -156,6 +156,39 @@ nodes:
     assert hits["n"] == 2
 
 
+def test_resume_applies_input_overrides(tmp_path: Path, tmp_settings) -> None:
+    path = tmp_path / "expr.yaml"
+    path.write_text(
+        """
+name: expr-resume
+inputs:
+  expr: "1 / 0"
+start: prep
+nodes:
+  - id: prep
+    type: transform
+    template: "go"
+    output_key: tag
+    next: calc
+  - id: calc
+    type: tool
+    tool: calc
+    arguments:
+      expression: "{{expr}}"
+    output_key: n
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(NodeError):
+        run_workflow_file(path, settings=tmp_settings, persist=True)
+    files = list(tmp_settings.runs_dir().glob("*.json"))
+    assert len(files) == 1
+    state = resume_run(files[0].stem, settings=tmp_settings, inputs={"expr": "3 + 4"})
+    assert state.status == "succeeded"
+    assert state.output_keys["n"] == 7
+    assert state.inputs["expr"] == "3 + 4"
+
+
 def test_resume_succeeded_run_rejected(tmp_path: Path, tmp_settings) -> None:
     path = tmp_path / "ok.yaml"
     path.write_text(

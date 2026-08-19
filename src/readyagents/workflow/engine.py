@@ -34,6 +34,8 @@ def run_workflow(
         seen: set[str] = set()
     else:
         current, seen = _resume_cursor(workflow, state)
+        if inputs:
+            state.inputs.update(dict(inputs))
         if metadata:
             state.metadata.update(dict(metadata))
 
@@ -80,6 +82,9 @@ def run_workflow(
         )
         state.finish("failed")
         _persist(ctx, state)
+        exc.state = state
+        if not exc.run_id:
+            exc.run_id = state.run_id
         raise
     return state
 
@@ -169,6 +174,8 @@ def _execute_with_policy(node: NodeSpec, state: RunState, ctx: ExecutionContext)
                 break
             time.sleep(backoff * (multiplier ** (attempt - 1)))
 
+    if isinstance(last_error, NodeError) and last_error.node_id == node.id:
+        raise last_error
     message = str(last_error) if last_error else "unknown error"
     raise NodeError(node.id, message, cause=last_error) from last_error
 
