@@ -336,6 +336,14 @@ def test_dry_run_skips_llm() -> None:
     assert "go x" in state.output_keys["out"]
 
 
+def test_unknown_node_type_lists_known() -> None:
+    spec = WorkflowSpec.model_validate(
+        {"name": "u", "nodes": [{"id": "x", "type": "notatype", "prompt": "n"}]}
+    )
+    with pytest.raises(Exception, match="Known types"):
+        run_workflow(spec, {}, _ctx(spec))
+
+
 def test_cycle_detected() -> None:
     spec = WorkflowSpec.model_validate(
         {

@@ -80,7 +80,11 @@ def execute_node(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         return _run_parallel(node, state, ctx)
     if kind == NodeType.include.value:
         return _run_include(node, state, ctx)
-    raise WorkflowError(f"Unsupported node type: {node.type}")
+    known = ", ".join(t.value for t in NodeType)
+    raise WorkflowError(
+        f"Unsupported node type '{node.type}' on node '{node.id}'. "
+        f"Known types: {known}. Packs may register extra types via readyagents.packs."
+    )
 
 
 def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> str:
@@ -213,7 +217,16 @@ def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dic
     collected: dict[str, Any] = {}
 
     def _one(branch: NodeSpec) -> tuple[str, Any]:
-        return branch.id, execute_node(branch, state, ctx)
+        try:
+            return branch.id, execute_node(branch, state, ctx)
+        except ApprovalRequired:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise NodeError(
+                branch.id,
+                f"parallel branch '{branch.id}' failed: {exc}",
+                cause=exc if isinstance(exc, BaseException) else None,
+            ) from exc
 
     workers = max(1, min(_MAX_PARALLEL, len(branches)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -237,7 +250,11 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     if not candidate.is_absolute():
         candidate = ctx.workflow_dir / candidate
     if not candidate.is_file():
-        raise NodeError(node.id, f"included workflow not found: {candidate}")
+        raise NodeError(
+            node.id,
+            f"included workflow not found: {candidate} "
+            f"(resolved from path '{raw_path}' relative to {ctx.workflow_dir})",
+        )
 
     from readyagents.workflow.engine import run_workflow
     from readyagents.workflow.runner import load_workflow, merge_inputs

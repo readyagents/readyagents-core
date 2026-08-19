@@ -117,6 +117,7 @@ def test_example_workflows_validate(examples_dir: Path) -> None:
         "fanout_gate.yaml",
         "include_demo.yaml",
         "included_min.yaml",
+        "composed_gate.yaml",
     ):
         spec = load_workflow(examples_dir / name)
         assert spec.nodes

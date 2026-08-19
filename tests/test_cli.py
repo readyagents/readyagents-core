@@ -187,6 +187,37 @@ def test_new_template_research(tmp_path: Path) -> None:
     assert "published" in ran.stdout
 
 
+def test_new_template_pipeline(tmp_path: Path) -> None:
+    dest = tmp_path / "pipe"
+    result = runner.invoke(app, ["new", "pipe", "--dest", str(dest), "--template", "pipeline"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    ran = runner.invoke(app, ["run", str(dest / "workflow.yaml"), "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "pipeline ok" in ran.stdout
+
+
+def test_new_template_review(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    dest = tmp_path / "rev"
+    (tmp_path / "README.md").write_text("sample file", encoding="utf-8")
+    result = runner.invoke(app, ["new", "rev", "--dest", str(dest), "--template", "review"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    ran = runner.invoke(
+        app,
+        [
+            "run",
+            str(dest / "workflow.yaml"),
+            "--input",
+            "path=README.md",
+            "--approve",
+            "gate",
+            "--no-persist",
+        ],
+    )
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "accepted" in ran.stdout
+
+
 def test_new_unknown_template(tmp_path: Path) -> None:
     result = runner.invoke(
         app, ["new", "x", "--dest", str(tmp_path / "x"), "--template", "nope"]
@@ -201,6 +232,37 @@ def test_include_demo_cli() -> None:
     )
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "include_demo ok: 17" in result.stdout
+
+
+def test_composed_gate_oneshot() -> None:
+    result = runner.invoke(
+        app, ["run", "examples/composed_gate.yaml", "--approve", "gate", "--no-persist"]
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "composed_gate ok" in result.stdout
+
+
+def test_runs_report_html(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    example = Path(__file__).resolve().parents[1] / "examples" / "calc_pipeline.yaml"
+    ran = runner.invoke(app, ["run", str(example)])
+    assert ran.exit_code == 0, ran.stdout
+    listed = runner.invoke(app, ["runs", "list", "--json"])
+    import json as json_mod
+
+    payload = json_mod.loads(listed.stdout[listed.stdout.find("[") :])
+    run_id = payload[0]["run_id"]
+    out = tmp_path / "report.html"
+    report = runner.invoke(app, ["runs", "report", run_id, "--out", str(out)])
+    assert report.exit_code == 0, report.stdout + report.stderr
+    assert out.is_file()
+    html = out.read_text(encoding="utf-8")
+    assert run_id in html
+    assert "add" in html
+    assert "calc_pipeline" in html
+    clear_settings_cache()
 
 
 def test_fanout_gate_oneshot() -> None:

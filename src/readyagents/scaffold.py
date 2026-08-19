@@ -6,7 +6,7 @@ from pathlib import Path
 
 from readyagents.errors import ConfigError
 
-TEMPLATES = ("basic", "approval", "research")
+TEMPLATES = ("basic", "approval", "research", "pipeline", "review")
 
 _ENV = """# ReadyAgents BYOK — fill in your keys. Never commit real keys.
 
@@ -70,6 +70,95 @@ nodes:
   - id: stopped
     type: transform
     template: "rejected: {{{{summary}}}}"
+    output_key: result
+""",
+    "pipeline": """name: {name}
+version: "1"
+description: >
+  Keyless pipeline starter (`--template pipeline`): calc, json_get, condition.
+  Run: readyagents run workflow.yaml
+
+start: add
+nodes:
+  - id: add
+    type: tool
+    tool: calc
+    arguments:
+      expression: "6 * 7"
+    output_key: n
+    next: pack
+
+  - id: pack
+    type: transform
+    template: '{{"n": {{{{n}}}}}}'
+    output_key: blob
+    next: pick
+
+  - id: pick
+    type: tool
+    tool: json_get
+    arguments:
+      data: "{{{{blob}}}}"
+      path: n
+    output_key: extracted
+    next: check
+
+  - id: check
+    type: condition
+    when: extracted == 42
+    then: ok
+    else: bad
+
+  - id: ok
+    type: transform
+    template: "{name} pipeline ok: {{{{extracted}}}}"
+    output_key: summary
+
+  - id: bad
+    type: transform
+    template: "{name} pipeline unexpected: {{{{extracted}}}}"
+    output_key: summary
+""",
+    "review": """name: {name}
+version: "1"
+description: >
+  File-review starter (`--template review`). Reads a workspace file, then a
+  transform you can later swap for an agent node. No API keys.
+  Run: readyagents run workflow.yaml --input path=README.md
+
+inputs:
+  path: README.md
+
+start: read
+nodes:
+  - id: read
+    type: tool
+    tool: read_file
+    arguments:
+      path: "{{{{path}}}}"
+    output_key: source
+    next: note
+
+  - id: note
+    type: transform
+    template: "review {{{{path}}}} ({name}): {{{{source}}}}"
+    output_key: summary
+    next: gate
+
+  - id: gate
+    type: approval
+    prompt: "Accept review of {{{{path}}}}?"
+    then: done
+    else: hold
+
+  - id: done
+    type: transform
+    template: "accepted: {{{{path}}}}"
+    output_key: result
+
+  - id: hold
+    type: transform
+    template: "held: {{{{path}}}}"
     output_key: result
 """,
     "research": """name: {name}
@@ -143,6 +232,26 @@ readyagents resume <run_id> --approve gate
 ```
 
 Copy `.env.example` to `.env` if you add agent nodes.
+""",
+    "pipeline": """# {name}
+
+Pipeline starter (`--template pipeline`). Builtin tools only.
+
+```bash
+readyagents run workflow.yaml
+readyagents runs show <run_id>
+readyagents runs report <run_id>
+```
+""",
+    "review": """# {name}
+
+File-review starter (`--template review`). Keyless transform; swap `note` for
+an `agent` node when you add API keys.
+
+```bash
+readyagents run workflow.yaml --input path=README.md --approve gate
+readyagents resume <run_id> --approve gate
+```
 """,
     "research": """# {name}
 

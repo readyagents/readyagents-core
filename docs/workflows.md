@@ -206,6 +206,7 @@ readyagents runs replay <run_id>
 | `examples/approval_gate.yaml` | No | Human-in-the-loop approval |
 | `examples/fanout_gate.yaml` | No | Parallel fan-out + approval |
 | `examples/include_demo.yaml` | No | Sub-workflow `include` |
+| `examples/composed_gate.yaml` | No | Include + parallel + approval |
 | `examples/research_brief.yaml` | Yes | Optional HTTP fetch |
 | `examples/support_triage.yaml` | Yes | JSON classify then branch |
 | `examples/code_review.yaml` | Yes | Builtin `read_file` + review |

@@ -1,0 +1,49 @@
+name: composed_gate
+version: "1"
+description: >
+  Combines include, parallel fan-out, and an approval gate. No LLM, no keys.
+  One shot: readyagents run examples/composed_gate.yaml --approve gate
+  Pause/resume: omit --approve, then readyagents resume <run_id> --approve gate
+
+inputs:
+  n: 8
+
+start: nested
+nodes:
+  - id: nested
+    type: include
+    path: included_min.yaml
+    inputs:
+      n: "{{n}}"
+    output_key: child
+    next: fan
+
+  - id: fan
+    type: parallel
+    output_key: parts
+    next: gate
+    branches:
+      - id: extra
+        type: tool
+        tool: calc
+        arguments:
+          expression: "{{child.total}} + 1"
+      - id: stamp
+        type: tool
+        tool: now
+
+  - id: gate
+    type: approval
+    prompt: "Accept composed total {{parts.extra}} (child {{child.total}}) at {{parts.stamp}}?"
+    then: ok
+    else: hold
+
+  - id: ok
+    type: transform
+    template: "composed_gate ok: {{parts.extra}}"
+    output_key: summary
+
+  - id: hold
+    type: transform
+    template: "composed_gate held: {{parts.extra}}"
+    output_key: summary

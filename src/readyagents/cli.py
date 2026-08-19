@@ -143,7 +143,7 @@ def new_cmd(
     for path in written:
         console.print(f"  {path.name}")
     wf = target / "workflow.yaml"
-    if template == "basic":
+    if template == "basic" or template == "pipeline":
         console.print(f"Run: [cyan]readyagents run {wf}[/cyan]")
     elif template == "research":
         console.print(f"Run: [cyan]readyagents run {wf} --approve publish[/cyan]")
@@ -372,6 +372,30 @@ def runs_inspect(
 ) -> None:
     """Alias for `runs show` — inspect stored state and the node timeline."""
     _show_run(run_id, as_json=as_json)
+
+
+@runs_app.command("report")
+def runs_report(
+    run_id: str = typer.Argument(..., help="Run id (or unique prefix)."),
+    dest: Path | None = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="HTML file to write (default: <run_id>.html in cwd).",
+    ),
+) -> None:
+    """Write a local HTML summary of a persisted run."""
+    from readyagents.config import get_settings
+    from readyagents.report import write_html_report
+
+    try:
+        state = load_run(get_settings().runs_dir(), run_id)
+        path = dest or Path(f"{state.run_id}.html")
+        written = write_html_report(state, path)
+    except ReadyAgentsError as exc:
+        _fail(exc)
+        return
+    console.print(f"[green]Wrote {written}[/green]  open it in a browser.")
 
 
 @runs_app.command("replay")

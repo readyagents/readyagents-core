@@ -56,6 +56,7 @@ class ApprovalRequired(ReadyAgentsError):
         self.prompt = prompt
         self.state = state
         super().__init__(
-            f"Approval required at node '{node_id}' (run {run_id}). "
-            f"{prompt} Resume with: readyagents resume {run_id} --approve {node_id}"
+            f"Approval required at node '{node_id}' (run {run_id}). {prompt} "
+            f"Resume with: readyagents resume {run_id} --approve {node_id} "
+            f"(or --reject {node_id})"
         )

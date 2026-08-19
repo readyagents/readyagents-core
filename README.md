@@ -77,12 +77,13 @@ flowchart LR
 | Command | Purpose |
 | --- | --- |
 | `readyagents init` | Write `.env` from `.env.example` if missing |
-| `readyagents new [name] [--template basic\|approval\|research]` | Scaffold workflow + README + `.env.example` |
+| `readyagents new [name] [--template basic\|approval\|research\|pipeline\|review]` | Scaffold workflow + README + `.env.example` |
 | `readyagents validate PATH` | Schema-validate a workflow |
 | `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE]` | Execute |
 | `readyagents resume RUN_ID [--approve NODE]` | Resume a paused or failed run |
 | `readyagents runs list` | List persisted runs |
 | `readyagents runs show RUN_ID` | Node timeline + stored state |
+| `readyagents runs report RUN_ID` | Local HTML summary of a run |
 | `readyagents runs replay RUN_ID` | New run from stored inputs |
 | `readyagents mcp serve` | Stdio MCP server (builtin tools) |
 | `readyagents packs` | List installed packs |

@@ -4,6 +4,11 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- HTML run reports: `readyagents runs report RUN_ID`
+- Extra `readyagents new` templates: `pipeline`, `review`
+- Example `examples/composed_gate.yaml` (include + parallel + approval)
+- Clearer errors for unknown node types, missing includes, and parallel branch failures
+
 ## 0.2.0 — 2026-08-19
 
 ### Added

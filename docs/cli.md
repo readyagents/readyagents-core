@@ -27,7 +27,7 @@ readyagents new my-flow --template research --dest ./research-flow
 readyagents run my-flow/workflow.yaml --approve gate
 ```
 
-Templates: `basic` (no gate), `approval` (default), `research` (parallel + approval).
+Templates: `basic`, `approval` (default), `research` (parallel + approval), `pipeline` (calc/json/condition), `review` (read_file + approval).
 
 ## `readyagents validate PATH`
 
@@ -78,6 +78,15 @@ Show status, pending node (if paused), **node timeline**, inputs, and outputs. `
 ## `readyagents runs replay RUN_ID`
 
 Start a **new** run with the stored workflow path and inputs (not a resume).
+
+## `readyagents runs report RUN_ID`
+
+Write a local HTML summary (timeline, usage, outputs). Open the file in a browser.
+
+```bash
+readyagents runs report <run_id>
+readyagents runs report <run_id> --out /tmp/run.html
+```
 
 ## `readyagents mcp serve`
 
