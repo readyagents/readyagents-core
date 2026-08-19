@@ -1,8 +1,10 @@
 # ReadyAgents Core 0.2.0
 
+Shipped 19 August 2026. GitHub release: https://github.com/readyagents/readyagents-core/releases/tag/v0.2.0
+
 **The first release that feels like a toolkit you can trust for one-shot work.**
 
-ReadyAgents Core is still the free, open-source engine: YAML workflows, BYOK, builtin tools, MCP optional, packs later. 0.1.0 proved clone-and-run. **0.2.0** is the reliability and operator-experience layer.
+ReadyAgents Core is the free, open-source engine: YAML workflows, BYOK, builtin tools, MCP optional, packs later. 0.1.0 proved clone-and-run. **0.2.0** is the reliability and operator-experience layer.
 
 Apache-2.0. No vendor keys. No always-on runtime in core.
 
@@ -40,7 +42,7 @@ readyagents run examples/approval_gate.yaml --approve gate
 
 ### Durable local runs
 
-JSON under `.readyagents/runs/<id>.json`, written atomically after each node.
+JSON under `.readyagents/runs/<run_id>.json`, written atomically after each node.
 
 ```bash
 readyagents runs list
@@ -103,12 +105,4 @@ Core stays small so those can plug in via `readyagents.packs`.
 
 - Python 3.11+
 - Existing 0.1.0 workflow YAML still runs. New node types (`approval`, `parallel`, `include`) are additive.
-- CLI exit code **2** now means “paused for approval”, not a generic failure.
-
-## Docs
-
-- [README](README.md)
-- [Changelog](CHANGELOG.md)
-- [Getting started](docs/getting-started.md)
-- [Workflows](docs/workflows.md)
-- [CLI](docs/cli.md)
+- CLI exit code **2** means “paused for approval”, not a generic failure.
