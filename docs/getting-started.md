@@ -8,19 +8,26 @@
 
 ## Install
 
+This package is **not on PyPI**. Clone the repo and install from that checkout.
+
 ```bash
+git clone https://github.com/readyagents/readyagents-core.git
+cd readyagents-core
 python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[all]"
-```
-
-For a minimal install (no LLM/MCP SDKs):
-
-```bash
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-You can still run builtin-tool workflows. Agent nodes will ask you to install `readyagents[openai]` or `readyagents[anthropic]` and set a key.
+That is enough for builtin-tool workflows (no API keys). LLM and MCP extras are optional and still come from this checkout:
+
+```bash
+pip install -e ".[openai]"
+pip install -e ".[anthropic]"
+pip install -e ".[mcp]"
+pip install -e ".[all]"
+```
+
+Agent nodes need a key in `.env` after you install the matching extra.
 
 ## Configure BYOK
 
