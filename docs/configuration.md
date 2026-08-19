@@ -46,7 +46,7 @@ If the node has no explicit `model:` and the default provider has no key, the en
 
 | Variable | Purpose |
 | --- | --- |
-| `READYAGENTS_ALLOW_HTTP` | `1` / `true` enables builtin `http_get` |
+| `READYAGENTS_ALLOW_HTTP` | `1` / `true` enables builtin `http_get` (still blocks private/loopback/metadata URLs) |
 | `READYAGENTS_WORKSPACE` | Sandbox root for `read_file` / `write_file` (default: cwd) |
 | `READYAGENTS_HOME` | Artifact directory (default: `.readyagents`). Run JSON lives in `$READYAGENTS_HOME/runs/` |
 | `READYAGENTS_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. Log lines include `run=` and `node=` |

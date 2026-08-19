@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import ast
+import ipaddress
 import json
 import operator
 import os
+import socket
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
+from readyagents import __version__
 from readyagents.errors import ToolError
 from readyagents.tools import FunctionTool, Tool
 
@@ -32,7 +36,17 @@ _UNARY: dict[type, Any] = {
 
 _HTTP_TIMEOUT = 20
 _MAX_HTTP_BYTES = 1_000_000
+_MAX_HTTP_REDIRECTS = 5
 _MAX_POW_EXP = 32
+_BLOCKED_HOST_NAMES = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "ip6-localhost",
+        "ip6-loopback",
+        "metadata.google.internal",
+    }
+)
 
 
 def builtin_tools(*, allow_http: bool, workspace: Path) -> list[Tool]:
@@ -177,17 +191,89 @@ def tool_http_get(url: str, *, allow_http: bool) -> str:
             "http_get is disabled. Set READYAGENTS_ALLOW_HTTP=1 or set allow_http: true "
             "on the workflow if you intend to fetch URLs."
         )
-    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-        raise ToolError("http_get: url must start with http:// or https://")
-    request = urllib.request.Request(url, method="GET", headers={"User-Agent": "readyagents/0.1"})
+    _assert_public_http_url(url)
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"User-Agent": f"readyagents/{__version__}"},
+    )
+    opener = urllib.request.build_opener(_SafeRedirectHandler)
     try:
-        with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT) as response:  # noqa: S310
+        with opener.open(request, timeout=_HTTP_TIMEOUT) as response:
             body = response.read(_MAX_HTTP_BYTES + 1)
-    except urllib.error.URLError as exc:
+    except ToolError:
+        raise
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise ToolError(f"http_get failed: {exc}") from exc
     if len(body) > _MAX_HTTP_BYTES:
         raise ToolError("http_get: response too large")
     return body.decode("utf-8", errors="replace")
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow a few redirects, but re-check each Location against the SSRF rules."""
+
+    max_redirections = _MAX_HTTP_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        _assert_public_http_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _assert_public_http_url(url: object) -> None:
+    if not isinstance(url, str) or not url.strip():
+        raise ToolError("http_get: url must start with http:// or https://")
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        raise ToolError("http_get: url must start with http:// or https://")
+    if parsed.username is not None or parsed.password is not None:
+        raise ToolError("http_get: URLs with userinfo are not allowed")
+    host = parsed.hostname
+    if not host:
+        raise ToolError("http_get: URL must include a host")
+    if _host_is_blocked(host):
+        raise ToolError(
+            f"http_get: host '{host}' is not allowed "
+            "(loopback, private, link-local, or metadata addresses)"
+        )
+
+
+def _host_is_blocked(host: str) -> bool:
+    name = host.strip().lower().rstrip(".")
+    if name in _BLOCKED_HOST_NAMES or name.endswith(".localhost") or name.endswith(".local"):
+        return True
+    try:
+        return _ip_is_blocked(ipaddress.ip_address(name))
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(name, None, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ToolError(f"http_get: could not resolve host '{host}'") from exc
+    if not infos:
+        raise ToolError(f"http_get: could not resolve host '{host}'")
+    for info in infos:
+        addr = info[4][0]
+        try:
+            if _ip_is_blocked(ipaddress.ip_address(addr)):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return bool(
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+        or not ip.is_global
+    )
 
 
 def tool_read_file(path: str, *, workspace: Path) -> str:

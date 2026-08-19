@@ -18,7 +18,7 @@ We will acknowledge the report and work on a fix before any disclosure.
 
 - `read_file` / `write_file` are intentionally sandboxed to a workspace directory (symlinks and `..` cannot escape; writes are atomic)
 - `type: include` paths must stay under the parent workflow directory
-- `http_get` is disabled unless explicitly opted in
+- `http_get` is disabled unless explicitly opted in, and even then refuses loopback, private, link-local, and metadata hosts (including after redirects)
 - `calc` is a restricted arithmetic evaluator, not Python `eval`
 - API keys live in the environment / local env files and must never be committed
 

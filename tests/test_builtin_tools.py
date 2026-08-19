@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,91 @@ def test_http_disabled_by_default(tmp_path: Path) -> None:
     registry = default_registry(allow_http=False, workspace=tmp_path)
     with pytest.raises(ToolError, match="disabled"):
         registry.get("http_get").run(url="https://example.com")
+
+
+def test_http_get_rejects_non_http_schemes() -> None:
+    from readyagents.mcp.builtin import tool_http_get
+
+    for url in ("file:///etc/passwd", "ftp://example.com/x", "not-a-url", ""):
+        with pytest.raises(ToolError, match="http://"):
+            tool_http_get(url, allow_http=True)
+
+
+def test_http_get_rejects_userinfo_and_empty_host() -> None:
+    from readyagents.mcp.builtin import tool_http_get
+
+    with pytest.raises(ToolError, match="userinfo"):
+        tool_http_get("https://user:pass@example.com/", allow_http=True)
+    with pytest.raises(ToolError, match="host"):
+        tool_http_get("https:///no-host", allow_http=True)
+
+
+def test_http_get_blocks_private_and_loopback_hosts() -> None:
+    from readyagents.mcp.builtin import tool_http_get
+
+    blocked = (
+        "http://127.0.0.1/",
+        "http://localhost/secret",
+        "http://[::1]/",
+        "https://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.5/admin",
+        "http://192.168.1.1/",
+        "http://172.16.0.1/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://2130706433/",
+        "http://foo.localhost/",
+    )
+    for url in blocked:
+        with pytest.raises(ToolError, match="not allowed"):
+            tool_http_get(url, allow_http=True)
+
+
+def test_http_get_fetches_public_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp.builtin import tool_http_get
+
+    monkeypatch.setattr(
+        "readyagents.mcp.builtin.socket.getaddrinfo",
+        lambda *a, **k: [(0, 0, 0, "", ("8.8.8.8", 0))],
+    )
+
+    class _Resp:
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self, n: int) -> bytes:
+            return b"hello-public"
+
+    class _Opener:
+        def open(self, request: object, timeout: object = None) -> _Resp:
+            headers = getattr(request, "headers", {})
+            ua = headers.get("User-agent") or headers.get("User-Agent")
+            assert ua == "readyagents/0.2.0"
+            return _Resp()
+
+    monkeypatch.setattr("urllib.request.build_opener", lambda *a, **k: _Opener())
+    assert tool_http_get("https://example.com/page", allow_http=True) == "hello-public"
+
+
+def test_http_get_refuses_redirect_to_private(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp.builtin import _SafeRedirectHandler
+
+    monkeypatch.setattr(
+        "readyagents.mcp.builtin.socket.getaddrinfo",
+        lambda *a, **k: [(0, 0, 0, "", ("8.8.8.8", 0))],
+    )
+    handler = _SafeRedirectHandler()
+    req = urllib.request.Request("https://example.com/start")
+    with pytest.raises(ToolError, match="not allowed"):
+        handler.redirect_request(
+            req, None, 302, "Found", {}, "http://169.254.169.254/latest/meta-data/"
+        )
+    # Public hosts still pass the redirect check (no network).
+    forwarded = handler.redirect_request(req, None, 302, "Found", {}, "https://example.com/next")
+    assert forwarded is not None
+    assert forwarded.full_url.startswith("https://example.com/next")
 
 
 def test_default_registry_includes_builtins(tmp_path: Path) -> None:

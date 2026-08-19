@@ -17,7 +17,7 @@ pip install "readyagents[mcp]"
 | `json_get` | `data`, `path` | Dotted path into JSON/dict |
 | `read_file` | `path` | Sandboxed to workspace |
 | `write_file` | `path`, `content` | Sandboxed to workspace |
-| `http_get` | `url` | Off until `READYAGENTS_ALLOW_HTTP=1` or `allow_http: true` |
+| `http_get` | `url` | Off until `READYAGENTS_ALLOW_HTTP=1` or `allow_http: true`; private/loopback/metadata URLs stay blocked |
 
 ## Client: MCP servers in a workflow
 
