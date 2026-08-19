@@ -22,12 +22,12 @@ Write a starter project: `workflow.yaml`, `README.md`, and `.env.example`.
 
 ```bash
 readyagents new my-flow
-readyagents new my-flow --template basic
-readyagents new my-flow --template research --dest ./research-flow
-readyagents run my-flow/workflow.yaml --approve gate
+readyagents run my-flow/workflow.yaml
+readyagents new gated --template approval
+readyagents run gated/workflow.yaml --approve gate
 ```
 
-Templates: `basic`, `approval` (default), `research` (parallel + approval), `pipeline` (calc/json/condition), `review` (read_file + approval).
+Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (default; calc/json/condition), `review` (read_file + approval).
 
 ## `readyagents validate PATH`
 

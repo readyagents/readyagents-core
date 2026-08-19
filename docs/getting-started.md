@@ -61,8 +61,9 @@ Scaffold a local starter (workflow + README + `.env.example`):
 
 ```bash
 readyagents new my-flow
-readyagents new my-flow --template basic
-readyagents run my-flow/workflow.yaml --approve gate
+readyagents run my-flow/workflow.yaml
+readyagents new gated --template approval
+readyagents run gated/workflow.yaml --approve gate
 ```
 
 Human-in-the-loop (no keys):

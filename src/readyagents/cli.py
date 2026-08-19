@@ -126,7 +126,7 @@ def new_cmd(
         help="Directory to write (defaults to ./<name>).",
     ),
     template: str = typer.Option(
-        "approval",
+        "pipeline",
         "--template",
         "-t",
         help=f"Starter kind: {', '.join(TEMPLATES)}.",
