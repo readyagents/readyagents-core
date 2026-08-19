@@ -104,6 +104,37 @@ def test_validate_help_lists_json() -> None:
     assert "--json" in result.stdout
 
 
+def test_run_missing_required_input(tmp_path: Path) -> None:
+    wf = tmp_path / "need.yaml"
+    wf.write_text(
+        """
+name: need
+required_inputs: [topic]
+nodes:
+  - id: t
+    type: transform
+    template: "{{topic}}"
+    output_key: v
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["run", str(wf), "--no-persist"])
+    assert result.exit_code == 1
+    text = result.stdout + result.stderr
+    assert "WorkflowError" in text
+    assert "Missing required inputs: topic" in text
+    assert "--input topic=..." in text
+    js = runner.invoke(app, ["run", str(wf), "--json", "--no-persist"])
+    assert js.exit_code == 1
+    data = _json_from_cli(js.stdout)
+    assert isinstance(data, dict)
+    assert data["error"] == "WorkflowError"
+    assert "--input topic=..." in str(data["message"])
+    ok = runner.invoke(app, ["run", str(wf), "--input", "topic=hello", "--no-persist"])
+    assert ok.exit_code == 0, ok.stdout + ok.stderr
+    assert "hello" in ok.stdout
+
+
 def test_init_writes_template_when_no_example(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     dest = tmp_path / ".env"

@@ -28,7 +28,7 @@ readyagents run hello.yaml --input name=Ada
 | `name` | Workflow name (stored on the run record) |
 | `version` | Free-form string |
 | `inputs` | Default inputs. A value may be a scalar or `{default, description}` |
-| `required_inputs` | Keys that must be present after defaults + CLI |
+| `required_inputs` | Keys that must be present after defaults + CLI. Missing keys fail with `Pass --input KEY=...`. |
 | `start` | First node id (defaults to the first node) |
 | `nodes` | List of node objects |
 | `edges` | Optional `{from, to, when}` routing |

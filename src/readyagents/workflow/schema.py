@@ -193,7 +193,8 @@ class WorkflowSpec(BaseModel):
 def validate_required_inputs(workflow: WorkflowSpec, provided: dict[str, Any]) -> None:
     missing = [name for name in workflow.required_inputs if name not in provided]
     if missing:
-        raise WorkflowError(f"Missing required inputs: {', '.join(missing)}")
+        example = " ".join(f"--input {name}=..." for name in missing)
+        raise WorkflowError(f"Missing required inputs: {', '.join(missing)}. Pass {example}.")
 
 
 NodeSpec.model_rebuild()

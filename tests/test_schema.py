@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from readyagents.errors import WorkflowError
-from readyagents.workflow.runner import load_workflow
+from readyagents.workflow.runner import load_workflow, merge_inputs
 from readyagents.workflow.schema import WorkflowSpec
 from readyagents.workflow.state import parse_input_pairs
 
@@ -140,6 +140,39 @@ def test_duplicate_parallel_branch_ids_rejected() -> None:
                 ],
             }
         )
+
+
+def test_required_inputs_missing_and_satisfied() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "need",
+            "required_inputs": ["topic", "n"],
+            "nodes": [
+                {"id": "t", "type": "transform", "template": "{{topic}}-{{n}}", "output_key": "v"}
+            ],
+        }
+    )
+    with pytest.raises(WorkflowError, match=r"Missing required inputs: topic, n") as exc:
+        merge_inputs(spec, {})
+    assert "--input topic=..." in str(exc.value)
+    assert "--input n=..." in str(exc.value)
+    with pytest.raises(WorkflowError, match="n"):
+        merge_inputs(spec, {"topic": "alpha"})
+    merged = merge_inputs(spec, {"topic": "alpha", "n": 2})
+    assert merged["topic"] == "alpha"
+    assert merged["n"] == 2
+
+
+def test_required_inputs_satisfied_by_default() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "need-def",
+            "inputs": {"topic": {"default": "alpha"}},
+            "required_inputs": ["topic"],
+            "nodes": [{"id": "t", "type": "transform", "template": "{{topic}}"}],
+        }
+    )
+    assert merge_inputs(spec, {})["topic"] == "alpha"
 
 
 def test_parse_input_pairs() -> None:
