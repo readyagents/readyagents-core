@@ -114,6 +114,7 @@ flowchart LR
 ## Docs
 
 - [Getting started](docs/getting-started.md)
+- [First ten minutes](docs/first-ten-minutes.md)
 - [Concepts](docs/concepts.md)
 - [Configuration (BYOK)](docs/configuration.md)
 - [Workflows](docs/workflows.md)
