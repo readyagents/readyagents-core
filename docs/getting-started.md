@@ -35,12 +35,14 @@ Agent nodes need a key in `.env` after you install the matching extra.
 cp .env.example .env
 ```
 
-Edit `.env` and set at least one of:
+Edit `.env` and set the key you actually have:
 
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 
-Optionally set `READYAGENTS_DEFAULT_MODEL=openai:gpt-4o-mini` (or `anthropic:claude-sonnet-4-5`).
+You do not have to pick OpenAI. If the agent node has no `model:` and you set only one key, the engine uses that provider.
+
+Optionally pin `READYAGENTS_DEFAULT_MODEL` (`openai:gpt-4o-mini` or `anthropic:claude-sonnet-4-5`).
 
 ReadyAgents never ships with vendor keys. You bring your own.
 
