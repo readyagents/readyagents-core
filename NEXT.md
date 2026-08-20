@@ -21,7 +21,7 @@ keyless examples still walk.
 **Done when:** `readyagents run` of a `write_file` workflow with `--dry-run`
 exits 0 and the target file is absent. A real (non-dry) run still writes.
 
-### 2. Node timeout actually expires
+### 2. Node timeout actually expires — shipped
 
 `_call_with_timeout` waits for the worker on `ThreadPoolExecutor` shutdown, so
 a timed-out node still blocks until the handler finishes. Retries can stack

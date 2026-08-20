@@ -181,13 +181,49 @@ def test_timeout_on_slow_tool() -> None:
             "nodes": [{"id": "s", "type": "tool", "tool": "slow", "timeout_seconds": 0.05}],
         }
     )
+    started = time.perf_counter()
     with pytest.raises(NodeError, match="timed out") as exc:
         run_workflow(spec, {}, ExecutionContext(spec, tools))
+    elapsed = time.perf_counter() - started
     msg = str(exc.value)
     assert msg.count("Node 's':") == 1
+    assert elapsed < 0.3, elapsed
     assert exc.value.run_id
     assert exc.value.state is not None
     assert getattr(exc.value.state, "status", None) == "failed"
+    assert getattr(exc.value.state, "pending_node", None) == "s"
+
+
+def test_timeout_does_not_wait_out_the_handler() -> None:
+    """Budget expiry must return immediately, not when the 2s handler finishes."""
+    import time
+
+    tools = ToolRegistry()
+    tools.register(
+        FunctionTool(name="slow", description="x", handler=lambda: time.sleep(2) or "x")
+    )
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "to",
+            "nodes": [
+                {
+                    "id": "s",
+                    "type": "tool",
+                    "tool": "slow",
+                    "timeout_seconds": 0.05,
+                    "retry": {"max_attempts": 2, "backoff_seconds": 0},
+                }
+            ],
+        }
+    )
+    started = time.perf_counter()
+    with pytest.raises(NodeError, match="timed out") as exc:
+        run_workflow(spec, {}, ExecutionContext(spec, tools))
+    elapsed = time.perf_counter() - started
+    assert elapsed < 1.0, elapsed
+    msg = str(exc.value)
+    assert msg.count("timed out") == 1
+    assert msg.count("Node 's':") == 1
     assert getattr(exc.value.state, "pending_node", None) == "s"
 
 

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Mapping
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Any
 
 from readyagents.errors import ApprovalRequired, NodeError, ReadyAgentsError, WorkflowError
@@ -184,16 +183,26 @@ def _call_with_timeout(node: NodeSpec, state: RunState, ctx: ExecutionContext) -
     if not node.timeout_seconds:
         return execute_node(node, state, ctx)
 
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(execute_node, node, state, ctx)
+    box: dict[str, Any] = {}
+
+    def _worker() -> None:
         try:
-            return future.result(timeout=node.timeout_seconds)
-        except FutureTimeout as exc:
-            raise NodeError(
-                node.id,
-                f"timed out after {node.timeout_seconds}s",
-                cause=exc,
-            ) from exc
+            box["value"] = execute_node(node, state, ctx)
+        except BaseException as exc:  # noqa: BLE001
+            box["error"] = exc
+
+    thread = threading.Thread(
+        target=_worker,
+        name=f"readyagents-node-{node.id}",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(node.timeout_seconds)
+    if thread.is_alive():
+        raise NodeError(node.id, f"timed out after {node.timeout_seconds}s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 def _uses_explicit_routing(workflow: WorkflowSpec) -> bool:

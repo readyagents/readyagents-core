@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- Node `timeout_seconds` returns when the budget expires (does not wait for the worker)
 - `--dry-run` stubs `write_file` (and `http_get`); it no longer mutates the workspace
 - Missing `required_inputs` list the keys and show `Pass --input KEY=...`
 - `readyagents validate --json`; validate table shows `then`/`else`; duplicate parallel branch ids are rejected
