@@ -8,6 +8,7 @@ test:
 
 lint:
 	ruff check src tests
+	ruff format --check src tests
 
 fmt:
 	ruff check --fix src tests
@@ -16,3 +17,4 @@ fmt:
 run-example:
 	readyagents run examples/calc_pipeline.yaml
 	readyagents run examples/approval_gate.yaml --approve gate
+	readyagents run examples/composed_gate.yaml --approve gate
