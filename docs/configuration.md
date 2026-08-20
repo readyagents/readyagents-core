@@ -47,13 +47,13 @@ If the node has no explicit `model:` and the default provider has no key, the en
 | Variable | Purpose |
 | --- | --- |
 | `READYAGENTS_ALLOW_HTTP` | `1` / `true` enables builtin `http_get` (still blocks private/loopback/metadata URLs) |
-| `READYAGENTS_WORKSPACE` | Sandbox root for `read_file` / `write_file` (default: cwd) |
+| `READYAGENTS_WORKSPACE` | Optional sandbox root for `read_file` / `write_file`. If unset, file tools use the workflow file's directory. |
 | `READYAGENTS_HOME` | Artifact directory (default: `.readyagents`). Run JSON lives in `$READYAGENTS_HOME/runs/` |
 | `READYAGENTS_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. Log lines include `run=` and `node=` |
 
 Inspect and resume those records with `readyagents runs list`, `readyagents runs show`, and `readyagents resume`.
 
-Workflow YAML may also set `allow_http: true` and `workspace:`. Either the env flag or the workflow flag enables HTTP. `workspace:` must resolve under `READYAGENTS_WORKSPACE` (cwd by default); it cannot point at `/` or a parent directory.
+Workflow YAML may also set `allow_http: true` and `workspace:`. Either the env flag or the workflow flag enables HTTP. `workspace:` must resolve under `READYAGENTS_WORKSPACE` when that env is set, otherwise under the workflow file's directory. It cannot point at `/` or a parent directory.
 
 ## Files you should never commit
 
