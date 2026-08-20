@@ -45,6 +45,7 @@ def test_run_calc_pipeline() -> None:
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "succeeded" in result.stdout
     assert "calc_pipeline ok" in result.stdout
+    assert re.search(r"run_id:\s*[0-9a-f]{16,}", result.stdout)
 
 
 def test_run_agent_workflow_without_keys_fails_byok(tmp_path, monkeypatch) -> None:

@@ -32,6 +32,7 @@ def test_readme_keyless_smoke(tmp_path: Path, monkeypatch) -> None:
     assert calc.exit_code == 0, calc.stdout + calc.stderr
     assert "succeeded" in calc.stdout
     assert "calc_pipeline ok" in calc.stdout
+    assert re.search(r"run_id:\s*[0-9a-f]{16,}", calc.stdout)
 
     listed = runner.invoke(app, ["runs", "list"])
     assert listed.exit_code == 0, listed.stdout + listed.stderr

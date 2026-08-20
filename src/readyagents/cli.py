@@ -512,6 +512,7 @@ def _emit_run(state: RunState, *, as_json: bool) -> None:
         _print_run(state)
         if state.status == "succeeded":
             console.print("[green]succeeded[/green]")
+            console.print(f"run_id: {state.run_id}")
             _print_usage(state)
             if state.output_keys:
                 console.print(

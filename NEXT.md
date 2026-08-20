@@ -42,7 +42,7 @@ typo from HITL. Resolve the path in our code and raise `ConfigError`
 **Done when:** `readyagents run missing.yaml` exits 1 and prints `ConfigError`;
 `readyagents run examples/approval_gate.yaml` still exits 2.
 
-### 4. Successful runs print `run_id:`
+### 4. Successful runs print `run_id:` — shipped
 
 Success currently puts the id only in the Rich table title. Failed and paused
 runs print `run_id:`. The 60-second README path (`runs list` / `runs report`)

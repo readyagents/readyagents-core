@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- Successful runs print `run_id:` (same copy-paste line as failed/paused runs)
 - Missing workflow path is `ConfigError` (exit 1), not Typer usage error (exit 2)
 - Node `timeout_seconds` returns when the budget expires (does not wait for the worker)
 - `--dry-run` stubs `write_file` (and `http_get`); it no longer mutates the workspace
