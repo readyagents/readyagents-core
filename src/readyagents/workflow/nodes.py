@@ -279,12 +279,22 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         workflow_dir=candidate.parent,
         include_depth=ctx.include_depth + 1,
     )
-    nested = run_workflow(
-        spec,
-        merged,
-        nested_ctx,
-        metadata={"source": str(candidate), "included_by": node.id},
-    )
+    try:
+        nested = run_workflow(
+            spec,
+            merged,
+            nested_ctx,
+            metadata={"source": str(candidate), "included_by": node.id},
+        )
+    except ApprovalRequired as exc:
+        # Parent run is what was persisted. Keep the child's node id so
+        # `resume --approve <child-id>` works; rewrite run_id to the parent.
+        raise ApprovalRequired(
+            exc.node_id,
+            state.run_id,
+            exc.prompt,
+            state=state,
+        ) from exc
     if nested.status == "paused":
         raise ApprovalRequired(
             nested.pending_node or node.id,

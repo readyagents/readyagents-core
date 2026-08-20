@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- Nested `include` approval pauses the parent run; `resume --approve <child-id>` continues it
 - YAML `workspace:` and MCP `run_workflow` paths stay under the settings workspace
 - `validate` rejects cyclic graphs (`next` / `then` / `else` / `edges`)
 - Successful runs print `run_id:` (same copy-paste line as failed/paused runs)

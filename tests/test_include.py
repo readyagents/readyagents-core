@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from readyagents.errors import NodeError, WorkflowError
+from readyagents.errors import ApprovalRequired, NodeError, WorkflowError
 from readyagents.tools import default_registry
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
@@ -118,6 +118,71 @@ nodes:
     state = run_workflow(spec, {}, ctx)
     assert state.status == "succeeded"
     assert state.output_keys["nested"]["total"] == 5
+
+
+def test_include_child_approval_pauses_then_resumes(tmp_path: Path) -> None:
+    (tmp_path / "child.yaml").write_text(
+        """
+name: nested_gate
+start: gate
+nodes:
+  - id: gate
+    type: approval
+    prompt: "Allow nested?"
+    then: ok
+    else: hold
+  - id: ok
+    type: transform
+    template: nested-ok
+    output_key: verdict
+  - id: hold
+    type: transform
+    template: nested-no
+    output_key: verdict
+""",
+        encoding="utf-8",
+    )
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "parent_include_gate",
+            "start": "nested",
+            "nodes": [
+                {
+                    "id": "nested",
+                    "type": "include",
+                    "path": "child.yaml",
+                    "output_key": "child",
+                    "next": "wrap",
+                },
+                {
+                    "id": "wrap",
+                    "type": "transform",
+                    "template": "parent ok: {{child.verdict}}",
+                    "output_key": "summary",
+                },
+            ],
+        }
+    )
+    tools = default_registry(allow_http=False, workspace=tmp_path)
+    ctx = ExecutionContext(spec, tools, workflow_dir=tmp_path)
+    with pytest.raises(ApprovalRequired) as paused:
+        run_workflow(spec, {}, ctx)
+    assert paused.value.node_id == "gate"
+    parent_id = paused.value.run_id
+    assert parent_id
+    assert paused.value.state is not None
+    assert getattr(paused.value.state, "pending_node", None) == "nested"
+    assert getattr(paused.value.state, "status", None) == "paused"
+    nested_ok = [r for r in paused.value.state.results if r.node_id == "nested"]
+    assert all(r.status != "ok" for r in nested_ok)
+
+    approved = ExecutionContext(
+        spec, tools, workflow_dir=tmp_path, decisions={"gate": "approve"}
+    )
+    state = run_workflow(spec, {}, approved, state=paused.value.state)
+    assert state.status == "succeeded"
+    assert state.run_id == parent_id
+    assert state.output_keys["summary"] == "parent ok: nested-ok"
 
 
 def test_include_depth_guard(tmp_path: Path) -> None:

@@ -344,6 +344,73 @@ nodes:
     clear_settings_cache()
 
 
+def test_include_child_approval_pause_resume_cli(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    (tmp_path / "child.yaml").write_text(
+        """
+name: nested_gate
+start: gate
+nodes:
+  - id: gate
+    type: approval
+    prompt: "Allow nested?"
+    then: ok
+    else: hold
+  - id: ok
+    type: transform
+    template: nested-ok
+    output_key: verdict
+  - id: hold
+    type: transform
+    template: nested-no
+    output_key: verdict
+""",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "parent.yaml"
+    parent.write_text(
+        """
+name: parent_include_gate
+start: nested
+nodes:
+  - id: nested
+    type: include
+    path: child.yaml
+    output_key: child
+    next: wrap
+  - id: wrap
+    type: transform
+    template: "parent ok: {{child.verdict}}"
+    output_key: summary
+""",
+        encoding="utf-8",
+    )
+    paused = runner.invoke(app, ["run", str(parent), "--json"])
+    assert paused.exit_code == 2, paused.stdout + paused.stderr
+    data = _json_from_cli(paused.stdout)
+    assert isinstance(data, dict)
+    assert data["error"] == "ApprovalRequired"
+    assert data["status"] == "paused"
+    assert data["node_id"] == "gate"
+    run_id = data["run_id"]
+    assert run_id
+    assert data.get("run", {}).get("pending_node") == "nested"
+    assert data.get("run", {}).get("run_id") == run_id
+
+    resumed = runner.invoke(
+        app, ["resume", run_id, "--approve", "gate", "--json"]
+    )
+    assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
+    done = _json_from_cli(resumed.stdout)
+    assert isinstance(done, dict)
+    assert done["status"] == "succeeded"
+    assert done["run_id"] == run_id
+    assert done.get("output_keys", {}).get("summary") == "parent ok: nested-ok"
+    clear_settings_cache()
+
+
 def test_run_json_paused_approval() -> None:
     result = runner.invoke(
         app, ["run", "examples/approval_gate.yaml", "--json", "--no-persist"]
