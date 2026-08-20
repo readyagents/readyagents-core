@@ -47,8 +47,6 @@ err_console = Console(stderr=True)
 
 _WORKFLOW_ARG = typer.Argument(
     ...,
-    exists=True,
-    readable=True,
     help="Workflow YAML or JSON file.",
 )
 
@@ -277,8 +275,6 @@ def resume_cmd(
     workflow: Path | None = typer.Option(
         None,
         "--workflow",
-        exists=True,
-        readable=True,
         help="Workflow file (defaults to the path stored on the run).",
     ),
     inputs: list[str] = typer.Option(

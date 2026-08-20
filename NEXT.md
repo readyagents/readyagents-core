@@ -31,7 +31,7 @@ cancel futures). Keep a single `NodeError` (`timed out after Ns`).
 **Done when:** a tool that sleeps 2s with `timeout_seconds: 0.05` fails in well
 under 1s; the error is one `NodeError` and names the node.
 
-### 3. Missing workflow path is exit 1, not approval's exit 2
+### 3. Missing workflow path is exit 1, not approval's exit 2 — shipped
 
 `run` / `validate` use Typer `exists=True`, so a missing file is a usage
 error (exit 2) — the same code as an approval pause. Scripts cannot tell a

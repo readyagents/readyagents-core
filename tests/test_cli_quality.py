@@ -59,7 +59,11 @@ def test_validate_invalid_workflow(tmp_path: Path) -> None:
 
 def test_validate_missing_file(tmp_path: Path) -> None:
     result = runner.invoke(app, ["validate", str(tmp_path / "nope.yaml")])
-    assert result.exit_code != 0
+    assert result.exit_code == 1
+    text = result.stdout + result.stderr
+    assert "ConfigError" in text
+    assert "Workflow file not found" in text
+    assert "nope.yaml" in text
 
 
 def test_validate_shows_else_routing() -> None:
@@ -382,6 +386,22 @@ nodes:
     assert target.is_file()
     assert target.read_text(encoding="utf-8") == "should-not-exist"
     clear_settings_cache()
+
+
+def test_run_missing_file_exits_1_not_pause_2(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.yaml"
+    result = runner.invoke(app, ["run", str(missing), "--no-persist"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    text = result.stdout + result.stderr
+    assert "ConfigError" in text
+    assert "Workflow file not found" in text
+    assert "nope.yaml" in text
+
+    paused = runner.invoke(
+        app, ["run", "examples/approval_gate.yaml", "--no-persist"]
+    )
+    assert paused.exit_code == 2, paused.stdout + paused.stderr
+    assert "ApprovalRequired" in paused.stdout + paused.stderr
 
 
 def test_run_help_lists_json() -> None:

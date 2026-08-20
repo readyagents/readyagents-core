@@ -55,7 +55,7 @@ readyagents run examples/research_brief.yaml --no-persist
 | `--json` | Print the run record as JSON on stdout (no tables; scripts/CI) |
 | `--log-level` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 
-Exit code `1` on validation or execution errors. Exit code `2` when an **approval** node pauses for a decision. The CLI prints `ErrorClass: message` rather than a full traceback. Logs include `run=<id>` and `node=<id>`.
+Exit code `1` on validation or execution errors, including a missing workflow file (`ConfigError`). Exit code `2` is reserved for an **approval** node pausing for a decision. The CLI prints `ErrorClass: message` rather than a full traceback. Logs include `run=<id>` and `node=<id>`.
 
 Failed runs print the **node timeline**, `run_id`, and a `readyagents resume RUN_ID` hint (same idea as approval pauses). `--json` on pause/failure is an error envelope (`error`, `message`, `run_id`, `run`) so scripts can still recover the record. `resume` and `runs replay` accept `--json` too. JSON is written without Rich markup, so values like `[dry-run]` stay intact.
 
