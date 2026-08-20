@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -160,45 +159,124 @@ def test_http_get_fetches_public_url(monkeypatch: pytest.MonkeyPatch) -> None:
         "readyagents.mcp.builtin.socket.getaddrinfo",
         lambda *a, **k: [(0, 0, 0, "", ("8.8.8.8", 0))],
     )
+    seen: dict[str, object] = {}
+
+    def fake_exchange(
+        scheme: str, hostname: str, ip: str, port: int, path: str
+    ) -> tuple[int, bytes, str | None]:
+        seen["ip"] = ip
+        seen["host"] = hostname
+        seen["path"] = path
+        return 200, b"hello-public", None
+
+    monkeypatch.setattr("readyagents.mcp.builtin._http_exchange", fake_exchange)
+    assert tool_http_get("https://example.com/page", allow_http=True) == "hello-public"
+    assert seen == {"ip": "8.8.8.8", "host": "example.com", "path": "/page"}
+
+
+def test_http_exchange_sends_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents import __version__
+    from readyagents.mcp.builtin import _http_exchange
+
+    captured: dict[str, object] = {}
 
     class _Resp:
-        def __enter__(self) -> _Resp:
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            return None
+        status = 200
 
         def read(self, n: int) -> bytes:
-            return b"hello-public"
+            return b"x"
 
-    class _Opener:
-        def open(self, request: object, timeout: object = None) -> _Resp:
-            headers = getattr(request, "headers", {})
-            ua = headers.get("User-agent") or headers.get("User-Agent")
-            assert ua == "readyagents/0.2.0"
+        def getheader(self, name: str) -> None:
+            return None
+
+    class _Conn:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        def request(self, method: str, path: str, headers: dict | None = None) -> None:
+            captured["ua"] = (headers or {}).get("User-Agent")
+            captured["path"] = path
+
+        def getresponse(self) -> _Resp:
             return _Resp()
 
-    monkeypatch.setattr("urllib.request.build_opener", lambda *a, **k: _Opener())
-    assert tool_http_get("https://example.com/page", allow_http=True) == "hello-public"
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("readyagents.mcp.builtin.http.client.HTTPConnection", _Conn)
+    status, body, location = _http_exchange("http", "example.com", "8.8.8.8", 80, "/z")
+    assert status == 200 and body == b"x" and location is None
+    assert captured["ua"] == f"readyagents/{__version__}"
+    assert captured["path"] == "/z"
+
+
+def test_http_get_pins_resolved_ip_against_rebind(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp.builtin import tool_http_get
+
+    resolves = {"n": 0}
+
+    def fake_gai(*args: object, **kwargs: object) -> list:
+        resolves["n"] += 1
+        if resolves["n"] == 1:
+            return [(0, 0, 0, "", ("8.8.8.8", 0))]
+        return [(0, 0, 0, "", ("127.0.0.1", 0))]
+
+    connected: list[str] = []
+
+    def fake_create(address: tuple, timeout: object = None, source_address: object = None) -> object:
+        connected.append(address[0])
+        raise OSError("pinned")
+
+    monkeypatch.setattr("readyagents.mcp.builtin.socket.getaddrinfo", fake_gai)
+    monkeypatch.setattr("readyagents.mcp.builtin.socket.create_connection", fake_create)
+    with pytest.raises(ToolError, match="failed"):
+        tool_http_get("https://rebind.example/", allow_http=True)
+    assert connected == ["8.8.8.8"]
+    assert resolves["n"] == 1
 
 
 def test_http_get_refuses_redirect_to_private(monkeypatch: pytest.MonkeyPatch) -> None:
-    from readyagents.mcp.builtin import _SafeRedirectHandler
+    from readyagents.mcp.builtin import tool_http_get
 
     monkeypatch.setattr(
         "readyagents.mcp.builtin.socket.getaddrinfo",
         lambda *a, **k: [(0, 0, 0, "", ("8.8.8.8", 0))],
     )
-    handler = _SafeRedirectHandler()
-    req = urllib.request.Request("https://example.com/start")
+
+    def fake_exchange(
+        scheme: str, hostname: str, ip: str, port: int, path: str
+    ) -> tuple[int, bytes, str | None]:
+        return 302, b"", "http://169.254.169.254/latest/meta-data/"
+
+    monkeypatch.setattr("readyagents.mcp.builtin._http_exchange", fake_exchange)
     with pytest.raises(ToolError, match="not allowed"):
-        handler.redirect_request(
-            req, None, 302, "Found", {}, "http://169.254.169.254/latest/meta-data/"
-        )
-    # Public hosts still pass the redirect check (no network).
-    forwarded = handler.redirect_request(req, None, 302, "Found", {}, "https://example.com/next")
-    assert forwarded is not None
-    assert forwarded.full_url.startswith("https://example.com/next")
+        tool_http_get("https://example.com/start", allow_http=True)
+
+
+def test_http_get_follows_public_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp.builtin import tool_http_get
+
+    hosts: list[str] = []
+
+    def fake_gai(name: str, *args: object, **kwargs: object) -> list:
+        hosts.append(name)
+        return [(0, 0, 0, "", ("8.8.8.8", 0))]
+
+    hop = {"n": 0}
+
+    def fake_exchange(
+        scheme: str, hostname: str, ip: str, port: int, path: str
+    ) -> tuple[int, bytes, str | None]:
+        hop["n"] += 1
+        if hop["n"] == 1:
+            return 302, b"", "https://other.example/next"
+        return 200, b"landed", None
+
+    monkeypatch.setattr("readyagents.mcp.builtin.socket.getaddrinfo", fake_gai)
+    monkeypatch.setattr("readyagents.mcp.builtin._http_exchange", fake_exchange)
+    assert tool_http_get("https://example.com/start", allow_http=True) == "landed"
+    assert hop["n"] == 2
+    assert "other.example" in hosts
 
 
 def test_default_registry_includes_builtins(tmp_path: Path) -> None:

@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import ast
+import http.client
 import ipaddress
 import json
 import operator
 import os
 import socket
-import urllib.error
-import urllib.request
+import ssl
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urljoin, urlparse
 from uuid import uuid4
 
 from readyagents import __version__
@@ -200,36 +200,74 @@ def tool_http_get(url: str, *, allow_http: bool) -> str:
             "http_get is disabled. Set READYAGENTS_ALLOW_HTTP=1 or set allow_http: true "
             "on the workflow if you intend to fetch URLs."
         )
-    _assert_public_http_url(url)
-    request = urllib.request.Request(
-        url,
-        method="GET",
-        headers={"User-Agent": f"readyagents/{__version__}"},
-    )
-    opener = urllib.request.build_opener(_SafeRedirectHandler)
+    current = url.strip() if isinstance(url, str) else ""
+    for _ in range(_MAX_HTTP_REDIRECTS + 1):
+        parsed = _assert_public_http_url(current)
+        assert parsed.hostname is not None
+        ips = _resolve_public_ips(parsed.hostname)
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        last_err: Exception | None = None
+        status = 0
+        body = b""
+        location: str | None = None
+        for ip in ips:
+            try:
+                status, body, location = _http_exchange(
+                    parsed.scheme, parsed.hostname, ip, port, path
+                )
+                last_err = None
+                break
+            except (TimeoutError, OSError) as exc:
+                last_err = exc
+        if last_err is not None:
+            raise ToolError(f"http_get failed: {last_err}") from last_err
+        if status in {301, 302, 303, 307, 308} and location:
+            current = urljoin(current, location)
+            continue
+        if status >= 400:
+            raise ToolError(f"http_get failed: HTTP Error {status}:")
+        if len(body) > _MAX_HTTP_BYTES:
+            raise ToolError("http_get: response too large")
+        return body.decode("utf-8", errors="replace")
+    raise ToolError("http_get: too many redirects")
+
+
+def _http_exchange(
+    scheme: str, hostname: str, ip: str, port: int, path: str
+) -> tuple[int, bytes, str | None]:
+    timeout = _HTTP_TIMEOUT
+    headers = {"User-Agent": f"readyagents/{__version__}"}
+    if scheme == "https":
+        ctx = ssl.create_default_context()
+        conn: http.client.HTTPConnection = http.client.HTTPSConnection(
+            hostname, port, timeout=timeout, context=ctx
+        )
+
+        def connect() -> None:
+            sock = socket.create_connection((ip, port), timeout)
+            conn.sock = ctx.wrap_socket(sock, server_hostname=hostname)
+
+        conn.connect = connect  # type: ignore[method-assign]
+    else:
+        conn = http.client.HTTPConnection(hostname, port, timeout=timeout)
+
+        def connect() -> None:
+            conn.sock = socket.create_connection((ip, port), timeout)
+
+        conn.connect = connect  # type: ignore[method-assign]
     try:
-        with opener.open(request, timeout=_HTTP_TIMEOUT) as response:
-            body = response.read(_MAX_HTTP_BYTES + 1)
-    except ToolError:
-        raise
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ToolError(f"http_get failed: {exc}") from exc
-    if len(body) > _MAX_HTTP_BYTES:
-        raise ToolError("http_get: response too large")
-    return body.decode("utf-8", errors="replace")
+        conn.request("GET", path, headers=headers)
+        resp = conn.getresponse()
+        body = resp.read(_MAX_HTTP_BYTES + 1)
+        return resp.status, body, resp.getheader("Location")
+    finally:
+        conn.close()
 
 
-class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Follow a few redirects, but re-check each Location against the SSRF rules."""
-
-    max_redirections = _MAX_HTTP_REDIRECTS
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
-        _assert_public_http_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def _assert_public_http_url(url: object) -> None:
+def _assert_public_http_url(url: object) -> ParseResult:
     if not isinstance(url, str) or not url.strip():
         raise ToolError("http_get: url must start with http:// or https://")
     parsed = urlparse(url.strip())
@@ -237,38 +275,50 @@ def _assert_public_http_url(url: object) -> None:
         raise ToolError("http_get: url must start with http:// or https://")
     if parsed.username is not None or parsed.password is not None:
         raise ToolError("http_get: URLs with userinfo are not allowed")
-    host = parsed.hostname
-    if not host:
+    if not parsed.hostname:
         raise ToolError("http_get: URL must include a host")
-    if _host_is_blocked(host):
-        raise ToolError(
-            f"http_get: host '{host}' is not allowed "
-            "(loopback, private, link-local, or metadata addresses)"
-        )
+    return parsed
 
 
-def _host_is_blocked(host: str) -> bool:
+def _resolve_public_ips(host: str) -> list[str]:
     name = host.strip().lower().rstrip(".")
+    not_allowed = (
+        f"http_get: host '{host}' is not allowed "
+        "(loopback, private, link-local, or metadata addresses)"
+    )
     if name in _BLOCKED_HOST_NAMES or name.endswith(".localhost") or name.endswith(".local"):
-        return True
+        raise ToolError(not_allowed)
     try:
-        return _ip_is_blocked(ipaddress.ip_address(name))
+        ip = ipaddress.ip_address(name)
     except ValueError:
-        pass
+        ip = None
+    if ip is not None:
+        if _ip_is_blocked(ip):
+            raise ToolError(not_allowed)
+        return [str(ip)]
     try:
         infos = socket.getaddrinfo(name, None, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         raise ToolError(f"http_get: could not resolve host '{host}'") from exc
     if not infos:
         raise ToolError(f"http_get: could not resolve host '{host}'")
+    ips: list[str] = []
+    seen: set[str] = set()
     for info in infos:
         addr = info[4][0]
         try:
-            if _ip_is_blocked(ipaddress.ip_address(addr)):
-                return True
+            parsed_ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-    return False
+        if _ip_is_blocked(parsed_ip):
+            raise ToolError(not_allowed)
+        text = str(parsed_ip)
+        if text not in seen:
+            seen.add(text)
+            ips.append(text)
+    if not ips:
+        raise ToolError(f"http_get: could not resolve host '{host}'")
+    return ips
 
 
 def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:

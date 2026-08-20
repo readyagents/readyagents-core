@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- `http_get` connects only to IPs already classified public (DNS rebind)
 - Builtin `calc` / `json_get` / `read_file` / `write_file` reject oversized inputs
 - `readyagents new` overwrite refusal is covered on the CLI (existing `workflow.yaml` / README / `.env.example`)
 - `readyagents run PATH --log-level DEBUG` is accepted (same flag as the root callback)
