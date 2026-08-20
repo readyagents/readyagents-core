@@ -3,11 +3,40 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
 from readyagents.errors import MCPError
 from readyagents.tools import FunctionTool, Tool
 from readyagents.workflow.schema import MCPServerSpec
+
+# Stdio children get a narrow env. API keys are not inherited unless the
+# workflow sets them under mcp_servers.<name>.env.
+_PASSTHROUGH_ENV = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "LC_MESSAGES",
+        "TERM",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+    }
+)
+
+
+def mcp_child_env(spec: MCPServerSpec) -> dict[str, str]:
+    """Env mapping passed to an MCP stdio subprocess."""
+    env = {key: value for key, value in os.environ.items() if key in _PASSTHROUGH_ENV}
+    if spec.env:
+        env.update(spec.env)
+    return env
 
 
 def mcp_available() -> bool:
@@ -56,7 +85,7 @@ async def _load_tools(servers: dict[str, MCPServerSpec]) -> dict[str, Tool]:
         params = StdioServerParameters(
             command=spec.command,
             args=spec.args,
-            env=spec.env or None,
+            env=mcp_child_env(spec),
             cwd=spec.cwd,
         )
         try:
@@ -68,7 +97,6 @@ async def _load_tools(servers: dict[str, MCPServerSpec]) -> dict[str, Tool]:
                         qualified = f"{name}.{item.name}"
                         desc = item.description or ""
                         tools[qualified] = _remote_tool(name, spec, item.name, desc)
-                        tools[item.name] = tools[qualified]
         except MCPError:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -94,7 +122,7 @@ async def _call_tool(spec: MCPServerSpec, tool_name: str, arguments: dict[str, A
     params = StdioServerParameters(
         command=spec.command,
         args=spec.args,
-        env=spec.env or None,
+        env=mcp_child_env(spec),
         cwd=spec.cwd,
     )
     try:

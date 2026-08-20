@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- MCP tools cannot shadow sandbox `read_file`; stdio children do not inherit API keys by default
 - `runs list` prints each run once (one `run_id:` line; `--json` unchanged)
 - Nested `include` approval pauses the parent run; `resume --approve <child-id>` continues it
 - YAML `workspace:` and MCP `run_workflow` paths stay under the settings workspace

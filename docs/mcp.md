@@ -67,5 +67,7 @@ Point your MCP host at the `readyagents` CLI command. Example Claude Desktop / h
 - `read_file` / `write_file` cannot escape the workspace directory
 - YAML `workspace:` cannot relocate the sandbox outside `READYAGENTS_WORKSPACE`
 - MCP `run_workflow` only loads a workflow file under that same root
+- MCP client tools are registered as `server.tool` and cannot replace sandbox builtins (`read_file`)
+- MCP stdio children do not inherit `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` unless set in `mcp_servers.*.env`
 - `http_get` is opt-in
 - `calc` does not evaluate arbitrary Python

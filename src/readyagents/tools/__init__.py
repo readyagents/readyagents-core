@@ -53,6 +53,8 @@ class ToolRegistry:
     def merge(self, other: Mapping[str, Tool] | ToolRegistry) -> None:
         items = other.as_dict() if isinstance(other, ToolRegistry) else other
         for tool in items.values():
+            if tool.name in self._tools:
+                continue
             self.register(tool)
 
 
