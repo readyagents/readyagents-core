@@ -218,7 +218,7 @@ def run(
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Interpolate and walk the graph without calling an LLM (or http_get).",
+        help="Walk the graph without calling an LLM, http_get, or write_file.",
     ),
     no_persist: bool = typer.Option(
         False, "--no-persist", help="Do not write a run record."

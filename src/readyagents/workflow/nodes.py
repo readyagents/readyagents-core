@@ -27,6 +27,8 @@ _APPROVE_VALUES = {"approve", "approved", "yes", "true", "accept", "ok"}
 _REJECT_VALUES = {"reject", "rejected", "deny", "denied", "no", "false"}
 _MAX_INCLUDE_DEPTH = 8
 _MAX_PARALLEL = 8
+# Dry-run still walks the graph; these tools must not hit the network or disk.
+_DRY_RUN_STUB_TOOLS = frozenset({"http_get", "write_file"})
 
 
 class ExecutionContext:
@@ -120,8 +122,8 @@ def _run_tool(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     args = interpolate_value(node.arguments, state.mapping())
     if not isinstance(args, dict):
         raise NodeError(node.id, "tool arguments must be a mapping")
-    if ctx.dry_run and name == "http_get":
-        return f"[dry-run] http_get {args}"
+    if ctx.dry_run and name in _DRY_RUN_STUB_TOOLS:
+        return f"[dry-run] {name} {args}"
     tool = ctx.tools.get(name)
     return tool.run(**args)
 

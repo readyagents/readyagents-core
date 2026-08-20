@@ -10,7 +10,7 @@ CLI/DX, examples/docs, tools/security/CI). Execute **one item per commit**.
 
 ## To do (execute in order)
 
-### 1. `--dry-run` must not write files
+### 1. `--dry-run` must not write files — shipped
 
 `--dry-run` already skips the LLM and stubs `http_get`. `write_file` still
 runs and mutates the workspace. Stub side-effecting tools (`write_file` at

@@ -342,6 +342,48 @@ def test_run_json_preserves_dry_run_markup() -> None:
     assert "dry-run" in blob
 
 
+def test_dry_run_does_not_write_file(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    monkeypatch.setenv("READYAGENTS_WORKSPACE", str(tmp_path))
+    target = tmp_path / "stamp.txt"
+    wf = tmp_path / "stamp.yaml"
+    wf.write_text(
+        """
+name: stamp
+start: write
+nodes:
+  - id: write
+    type: tool
+    tool: write_file
+    arguments:
+      path: stamp.txt
+      content: should-not-exist
+    output_key: written
+""",
+        encoding="utf-8",
+    )
+    dry = runner.invoke(
+        app, ["run", str(wf), "--dry-run", "--json", "--no-persist"]
+    )
+    assert dry.exit_code == 0, dry.stdout + dry.stderr
+    assert not target.exists()
+    data = _json_from_cli(dry.stdout)
+    assert isinstance(data, dict)
+    assert data["status"] == "succeeded"
+    written = data["output_keys"]["written"]
+    assert isinstance(written, str)
+    assert written.startswith("[dry-run]")
+    assert "write_file" in written
+
+    real = runner.invoke(app, ["run", str(wf), "--no-persist"])
+    assert real.exit_code == 0, real.stdout + real.stderr
+    assert target.is_file()
+    assert target.read_text(encoding="utf-8") == "should-not-exist"
+    clear_settings_cache()
+
+
 def test_run_help_lists_json() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
