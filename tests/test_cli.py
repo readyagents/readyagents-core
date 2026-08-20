@@ -10,6 +10,11 @@ from readyagents.config import clear_settings_cache
 
 runner = CliRunner()
 
+def _plain(text: str) -> str:
+    """Strip ANSI and whitespace so Rich wrapping cannot hide tokens."""
+    return re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", text))
+
+
 
 def _run_id(text: str) -> str:
     match = re.search(r"run_id:\s*([0-9a-f]{16,})", text)
@@ -238,8 +243,8 @@ def test_new_refuses_overwrite(tmp_path: Path) -> None:
     (dest / "workflow.yaml").write_text(marker, encoding="utf-8")
     result = runner.invoke(app, ["new", "existing", "--dest", str(dest)])
     assert result.exit_code == 1, result.stdout + result.stderr
-    text = result.stdout + result.stderr
-    assert "Refusing to overwrite" in text
+    text = _plain(result.stdout + result.stderr)
+    assert "Refusingtooverwrite" in text
     assert "workflow.yaml" in text
     assert (dest / "workflow.yaml").read_text(encoding="utf-8") == marker
     assert not (dest / "README.md").exists()
