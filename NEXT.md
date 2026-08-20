@@ -86,7 +86,7 @@ is unchanged.
 - Pin `http_get` to IPs already classified public (DNS rebinding)
 - Docs extras still look like PyPI (`pip install "readyagents[openai]"`)
 - Makefile / CONTRIBUTING / CI: `composed_gate`, `ruff format --check`
-- `readyagents new` overwrite-refusal test
+- `readyagents new` overwrite-refusal test — shipped this pass
 - `packs --json`; `runs show --json` envelope for missing ids
 - Parallel branches honoring `timeout_seconds` / `retry`
 

@@ -231,6 +231,29 @@ def test_new_template_review(tmp_path: Path, monkeypatch) -> None:
     assert "accepted" in ran.stdout
 
 
+def test_new_refuses_overwrite(tmp_path: Path) -> None:
+    dest = tmp_path / "existing"
+    dest.mkdir()
+    marker = "KEEP-THIS-WORKFLOW"
+    (dest / "workflow.yaml").write_text(marker, encoding="utf-8")
+    result = runner.invoke(app, ["new", "existing", "--dest", str(dest)])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    text = result.stdout + result.stderr
+    assert "Refusing to overwrite" in text
+    assert "workflow.yaml" in text
+    assert (dest / "workflow.yaml").read_text(encoding="utf-8") == marker
+    assert not (dest / "README.md").exists()
+    assert not (dest / ".env.example").exists()
+
+    env_dest = tmp_path / "has-env"
+    env_dest.mkdir()
+    (env_dest / ".env.example").write_text("KEEP-ENV", encoding="utf-8")
+    env_result = runner.invoke(app, ["new", "has-env", "--dest", str(env_dest)])
+    assert env_result.exit_code == 1
+    assert (env_dest / ".env.example").read_text(encoding="utf-8") == "KEEP-ENV"
+    assert not (env_dest / "workflow.yaml").exists()
+
+
 def test_new_unknown_template(tmp_path: Path) -> None:
     result = runner.invoke(
         app, ["new", "x", "--dest", str(tmp_path / "x"), "--template", "nope"]

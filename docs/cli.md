@@ -18,7 +18,7 @@ readyagents init --dest .env
 
 ## `readyagents new [name]`
 
-Write a starter project: `workflow.yaml`, `README.md`, and `.env.example`.
+Write a starter project: `workflow.yaml`, `README.md`, and `.env.example`. Refuses to overwrite those files if they already exist.
 
 ```bash
 readyagents new my-flow
