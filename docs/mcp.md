@@ -5,7 +5,7 @@ ReadyAgents includes an MCP **client** (call other servers from a workflow) and 
 MCP is an **optional extra**. Builtin tools are Python and need no Node.js.
 
 ```bash
-pip install "readyagents[mcp]"
+pip install -e ".[mcp]"
 ```
 
 ## Builtin tools (always available)

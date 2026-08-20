@@ -33,9 +33,9 @@ Model references:
 Install extras to talk to a provider:
 
 ```bash
-pip install "readyagents[openai]"
-pip install "readyagents[anthropic]"
-pip install "readyagents[all]"
+pip install -e ".[openai]"
+pip install -e ".[anthropic]"
+pip install -e ".[all]"
 ```
 
 If an agent node runs with no key, the CLI exits with a short `LLMError` telling you which variable to set — not a traceback dump.
