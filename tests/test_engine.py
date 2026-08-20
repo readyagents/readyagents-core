@@ -345,17 +345,18 @@ def test_unknown_node_type_lists_known() -> None:
 
 
 def test_cycle_detected() -> None:
-    spec = WorkflowSpec.model_validate(
-        {
-            "name": "loop",
-            "nodes": [
-                {"id": "a", "type": "transform", "template": "1", "next": "b"},
-                {"id": "b", "type": "transform", "template": "2", "next": "a"},
-            ],
-        }
-    )
-    with pytest.raises(Exception, match="Cycle"):
-        run_workflow(spec, {}, _ctx(spec))
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="Cycle"):
+        WorkflowSpec.model_validate(
+            {
+                "name": "loop",
+                "nodes": [
+                    {"id": "a", "type": "transform", "template": "1", "next": "b"},
+                    {"id": "b", "type": "transform", "template": "2", "next": "a"},
+                ],
+            }
+        )
 
 
 def test_edges_with_when() -> None:

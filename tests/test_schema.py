@@ -123,6 +123,53 @@ def test_example_workflows_validate(examples_dir: Path) -> None:
         assert spec.nodes
 
 
+def test_cycle_rejected() -> None:
+    with pytest.raises(ValidationError, match="Cycle"):
+        WorkflowSpec.model_validate(
+            {
+                "name": "loop",
+                "nodes": [
+                    {"id": "a", "type": "transform", "template": "1", "next": "b"},
+                    {"id": "b", "type": "transform", "template": "2", "next": "a"},
+                ],
+            }
+        )
+
+
+def test_self_loop_rejected() -> None:
+    with pytest.raises(ValidationError, match="Cycle"):
+        WorkflowSpec.model_validate(
+            {
+                "name": "self",
+                "nodes": [
+                    {"id": "a", "type": "transform", "template": "1", "next": "a"},
+                ],
+            }
+        )
+
+
+def test_branching_dag_is_not_a_cycle() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "dag",
+            "start": "gate",
+            "nodes": [
+                {
+                    "id": "gate",
+                    "type": "condition",
+                    "when": "ok == true",
+                    "then": "yes",
+                    "else": "no",
+                },
+                {"id": "yes", "type": "transform", "template": "Y", "next": "end"},
+                {"id": "no", "type": "transform", "template": "N", "next": "end"},
+                {"id": "end", "type": "transform", "template": "done"},
+            ],
+        }
+    )
+    assert spec.start == "gate"
+
+
 def test_duplicate_parallel_branch_ids_rejected() -> None:
     with pytest.raises(ValidationError, match="duplicate parallel branch"):
         WorkflowSpec.model_validate(

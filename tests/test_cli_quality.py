@@ -87,6 +87,32 @@ def test_validate_json_ok() -> None:
     assert "stamp" in ids
 
 
+def test_validate_json_cycle(tmp_path: Path) -> None:
+    path = tmp_path / "cycle.yaml"
+    path.write_text(
+        """
+name: loop
+nodes:
+  - id: a
+    type: transform
+    template: "1"
+    next: b
+  - id: b
+    type: transform
+    template: "2"
+    next: a
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["validate", str(path), "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is False
+    assert data["error"] == "WorkflowError"
+    assert "Cycle" in data["message"]
+
+
 def test_validate_json_invalid(tmp_path: Path) -> None:
     path = tmp_path / "bad.yaml"
     path.write_text(

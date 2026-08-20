@@ -52,7 +52,7 @@ needs a copy-pasteable id on the happy path too.
 `run_id:` followed by the hex id, and still contains `succeeded` and
 `calc_pipeline ok`.
 
-### 5. `validate` rejects cyclic graphs
+### 5. `validate` rejects cyclic graphs — shipped
 
 Runtime already raises `WorkflowError` on cycles (`seen` + 500-step cap).
 `readyagents validate` only checks dangling refs, so `a.next: b` / `b.next: a`

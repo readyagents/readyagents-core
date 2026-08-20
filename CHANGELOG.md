@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- `validate` rejects cyclic graphs (`next` / `then` / `else` / `edges`)
 - Successful runs print `run_id:` (same copy-paste line as failed/paused runs)
 - Missing workflow path is `ConfigError` (exit 1), not Typer usage error (exit 2)
 - Node `timeout_seconds` returns when the budget expires (does not wait for the worker)

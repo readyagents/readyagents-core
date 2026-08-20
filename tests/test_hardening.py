@@ -89,7 +89,9 @@ def test_unknown_approval_decision() -> None:
         {
             "name": "bad",
             "nodes": [
-                {"id": "g", "type": "approval", "prompt": "?", "then": "g", "else": "g"},
+                {"id": "g", "type": "approval", "prompt": "?", "then": "yes", "else": "no"},
+                {"id": "yes", "type": "transform", "template": "y"},
+                {"id": "no", "type": "transform", "template": "n"},
             ],
         }
     )

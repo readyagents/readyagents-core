@@ -175,7 +175,34 @@ class WorkflowSpec(BaseModel):
                 raise ValueError(f"Edge from unknown node '{edge.from_}'")
             if edge.to not in known:
                 raise ValueError(f"Edge to unknown node '{edge.to}'")
+        self._assert_acyclic()
         return self
+
+    def _assert_acyclic(self) -> None:
+        graph: dict[str, list[str]] = {node.id: [] for node in self.nodes}
+        for node in self.nodes:
+            for ref in (node.next, node.then, node.else_):
+                if ref is not None:
+                    graph[node.id].append(ref)
+        for edge in self.edges:
+            graph[edge.from_].append(edge.to)
+
+        visiting: set[str] = set()
+        done: set[str] = set()
+
+        def dfs(nid: str) -> None:
+            visiting.add(nid)
+            for nxt in graph[nid]:
+                if nxt in visiting:
+                    raise ValueError(f"Cycle detected at node '{nxt}'")
+                if nxt not in done and nxt in graph:
+                    dfs(nxt)
+            visiting.remove(nid)
+            done.add(nid)
+
+        for nid in graph:
+            if nid not in done:
+                dfs(nid)
 
     def node_map(self) -> dict[str, NodeSpec]:
         return {n.id: n for n in self.nodes}
