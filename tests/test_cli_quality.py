@@ -569,6 +569,84 @@ nodes:
     clear_settings_cache()
 
 
+def test_file_tools_sandbox_to_workflow_dir(tmp_path: Path, monkeypatch) -> None:
+    """read_file resolves next to the workflow file, even if cwd is elsewhere."""
+    clear_settings_cache()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "note.txt").write_text("from-workflow-dir", encoding="utf-8")
+    wf = proj / "flow.yaml"
+    wf.write_text(
+        """
+name: wfdir
+start: r
+nodes:
+  - id: r
+    type: tool
+    tool: read_file
+    arguments:
+      path: note.txt
+    output_key: text
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    monkeypatch.delenv("READYAGENTS_WORKSPACE", raising=False)
+    result = runner.invoke(app, ["run", str(wf), "--no-persist"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "from-workflow-dir" in result.stdout
+    clear_settings_cache()
+
+
+def test_file_tools_ignore_process_cwd(tmp_path: Path, monkeypatch) -> None:
+    """A file that exists only in cwd is not readable."""
+    clear_settings_cache()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (tmp_path / "cwd_only.txt").write_text("from-cwd", encoding="utf-8")
+    wf = proj / "flow.yaml"
+    wf.write_text(
+        """
+name: cwdtrap
+start: r
+nodes:
+  - id: r
+    type: tool
+    tool: read_file
+    arguments:
+      path: cwd_only.txt
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    monkeypatch.delenv("READYAGENTS_WORKSPACE", raising=False)
+    result = runner.invoke(app, ["run", str(wf), "--no-persist"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    text = result.stdout + result.stderr
+    assert "cwd_only.txt" in text
+    clear_settings_cache()
+
+
+def test_code_review_from_other_cwd(tmp_path: Path, monkeypatch) -> None:
+    """Stranger case: code_review from outside the repo root."""
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    monkeypatch.delenv("READYAGENTS_WORKSPACE", raising=False)
+    root = Path(__file__).resolve().parents[1]
+    result = runner.invoke(
+        app,
+        ["run", str(root / "examples" / "code_review.yaml"), "--dry-run", "--no-persist"],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "succeeded" in result.stdout
+    clear_settings_cache()
+
+
 def test_run_missing_file_exits_1_not_pause_2(tmp_path: Path) -> None:
     missing = tmp_path / "nope.yaml"
     result = runner.invoke(app, ["run", str(missing), "--no-persist"])
