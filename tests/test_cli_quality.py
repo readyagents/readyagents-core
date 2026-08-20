@@ -622,3 +622,45 @@ def test_mcp_serve_invokes_stdio(monkeypatch) -> None:
     result = runner.invoke(app, ["mcp", "serve"])
     assert result.exit_code == 0, result.stdout + result.stderr
     assert called["n"] == 1
+
+
+def test_packs_json_empty() -> None:
+    result = runner.invoke(app, ["packs", "--json"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is True
+    assert data["packs"] == []
+
+
+def test_packs_help_lists_json() -> None:
+    result = runner.invoke(app, ["packs", "--help"])
+    assert result.exit_code == 0
+    assert "--json" in _plain(result.stdout)
+
+
+def test_runs_show_json_missing_id(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    result = runner.invoke(app, ["runs", "show", "does-not-exist", "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is False
+    assert data["error"] == "ConfigError"
+    assert data["run_id"] == "does-not-exist"
+    assert "not found" in data["message"].lower()
+
+
+def test_runs_inspect_json_missing_id(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    result = runner.invoke(app, ["runs", "inspect", "nope", "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is False
+    assert data["run_id"] == "nope"
+

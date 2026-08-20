@@ -318,9 +318,32 @@ def resume_cmd(
 
 
 @app.command("packs")
-def packs_cmd() -> None:
+def packs_cmd(
+    as_json: bool = typer.Option(False, "--json", help="Print JSON instead of a table."),
+) -> None:
     """List installed ReadyAgents packs (entry point group readyagents.packs)."""
-    found = discover_packs()
+    try:
+        found = discover_packs()
+    except ReadyAgentsError as exc:
+        if as_json:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
+            raise typer.Exit(code=1) from exc
+        _fail(exc)
+        return
+    if as_json:
+        _print_json(
+            {
+                "ok": True,
+                "packs": [{"name": pack.name, "version": pack.version} for pack in found],
+            }
+        )
+        return
     if not found:
         console.print("No packs installed. Core runs without any packs.")
         console.print(
@@ -466,6 +489,16 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
     try:
         state = load_run(get_settings().runs_dir(), run_id)
     except ReadyAgentsError as exc:
+        if as_json:
+            _print_json(
+                {
+                    "ok": False,
+                    "error": type(exc).__name__,
+                    "message": str(exc),
+                    "run_id": run_id,
+                }
+            )
+            raise typer.Exit(code=1) from exc
         _fail(exc)
         return
     if as_json:
