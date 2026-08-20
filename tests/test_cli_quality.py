@@ -10,6 +10,11 @@ from readyagents.config import clear_settings_cache
 
 runner = CliRunner()
 
+def _plain(text: str) -> str:
+    """Strip ANSI and whitespace so Rich wrapping cannot hide tokens."""
+    return re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", text))
+
+
 
 def _run_id(text: str) -> str:
     match = re.search(r"run_id:\s*([0-9a-f]{16,})", text)
@@ -131,7 +136,7 @@ def test_validate_json_invalid(tmp_path: Path) -> None:
 def test_validate_help_lists_json() -> None:
     result = runner.invoke(app, ["validate", "--help"])
     assert result.exit_code == 0
-    assert "--json" in result.stdout
+    assert "--json" in _plain(result.stdout)
 
 
 def test_run_missing_required_input(tmp_path: Path) -> None:
@@ -583,7 +588,7 @@ def test_run_missing_file_exits_1_not_pause_2(tmp_path: Path) -> None:
 def test_run_help_lists_json() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    assert "--json" in result.stdout
+    assert "--json" in _plain(result.stdout)
 
 
 def test_run_accepts_log_level() -> None:
@@ -602,7 +607,7 @@ def test_run_accepts_log_level() -> None:
     assert "calc_pipeline ok" in result.stdout
     help_r = runner.invoke(app, ["run", "--help"])
     assert help_r.exit_code == 0
-    assert "--log-level" in help_r.stdout
+    assert "--log-level" in _plain(help_r.stdout)
 
 
 def test_mcp_serve_invokes_stdio(monkeypatch) -> None:
