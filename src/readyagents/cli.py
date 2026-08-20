@@ -364,19 +364,13 @@ def runs_list(
     if not found:
         console.print(f"No runs in {settings.runs_dir()}")
         return
-    table = Table(title=f"Runs in {settings.runs_dir()}", expand=True)
-    table.add_column("run_id", no_wrap=True, overflow="fold")
-    table.add_column("workflow")
-    table.add_column("status")
-    table.add_column("started_at")
-    table.add_column("nodes")
+    console.print(f"Runs in {settings.runs_dir()}")
     for state in found:
         nodes = ",".join(r.node_id for r in state.results) or "-"
-        table.add_row(state.run_id, state.workflow_name, state.status, state.started_at, nodes)
         console.print(
-            f"run_id: {state.run_id}  workflow: {state.workflow_name}  status: {state.status}"
+            f"run_id: {state.run_id}  workflow: {state.workflow_name}  "
+            f"status: {state.status}  started: {state.started_at}  nodes: {nodes}"
         )
-    console.print(table)
 
 
 @runs_app.command("show")

@@ -79,7 +79,7 @@ is unchanged.
 ## Leftover (not in this pass)
 
 - Include-child approval pause/resume (`pending_node` is the include node) — shipped this pass
-- `runs list` prints each run twice (line + table)
+- `runs list` prints each run twice (line + table) — shipped this pass
 - `--log-level` on `run` as docs claim (today it is root-only)
 - MCP client must not shadow sandbox builtins or inherit API keys
 - Size caps for `read_file` / `write_file` / `json_get` / `calc`

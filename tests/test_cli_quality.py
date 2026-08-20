@@ -344,6 +344,29 @@ nodes:
     clear_settings_cache()
 
 
+def test_runs_list_prints_run_id_once(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    example = Path(__file__).resolve().parents[1] / "examples" / "calc_pipeline.yaml"
+    ran = runner.invoke(app, ["run", str(example)])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    listed_json = runner.invoke(app, ["runs", "list", "--json"])
+    assert listed_json.exit_code == 0, listed_json.stdout
+    payload = _json_from_cli(listed_json.stdout)
+    assert isinstance(payload, list)
+    assert payload
+    run_id = payload[0]["run_id"]
+    assert run_id in {item["run_id"] for item in payload}
+
+    listed = runner.invoke(app, ["runs", "list"])
+    assert listed.exit_code == 0, listed.stdout
+    assert listed.stdout.count(run_id) == 1
+    assert listed.stdout.count("run_id:") == 1
+    assert "calc_pipeline" in listed.stdout
+    clear_settings_cache()
+
+
 def test_include_child_approval_pause_resume_cli(tmp_path: Path, monkeypatch) -> None:
     clear_settings_cache()
     monkeypatch.chdir(tmp_path)
