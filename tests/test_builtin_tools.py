@@ -229,3 +229,40 @@ def test_research_brief_dry_run_no_keys(examples_dir: Path, tmp_settings) -> Non
     )
     assert state.status == "succeeded"
     assert any("[dry-run]" in str(v) for v in state.node_outputs.values())
+
+
+def test_calc_rejects_long_expression(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp import builtin as builtin_mod
+
+    monkeypatch.setattr(builtin_mod, "_MAX_CALC_CHARS", 8)
+    with pytest.raises(ToolError, match="too long"):
+        tool_calc("1 + 1 + 1")
+
+
+def test_json_get_rejects_large_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp import builtin as builtin_mod
+
+    monkeypatch.setattr(builtin_mod, "_MAX_JSON_BYTES", 8)
+    with pytest.raises(ToolError, match="too large"):
+        tool_json_get("{\"a\": 12345}", "a")
+    with pytest.raises(ToolError, match="too large"):
+        tool_json_get(b"{\"a\": 12345}", "a")
+
+
+def test_read_file_rejects_large_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp import builtin as builtin_mod
+
+    monkeypatch.setattr(builtin_mod, "_MAX_FILE_BYTES", 8)
+    (tmp_path / "big.txt").write_text("0123456789", encoding="utf-8")
+    with pytest.raises(ToolError, match="too large"):
+        tool_read_file("big.txt", workspace=tmp_path)
+
+
+def test_write_file_rejects_large_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from readyagents.mcp import builtin as builtin_mod
+
+    monkeypatch.setattr(builtin_mod, "_MAX_FILE_BYTES", 8)
+    with pytest.raises(ToolError, match="too large"):
+        tool_write_file("out.txt", "0123456789", workspace=tmp_path)
+    assert not (tmp_path / "out.txt").exists()
+

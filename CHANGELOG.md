@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- Builtin `calc` / `json_get` / `read_file` / `write_file` reject oversized inputs
 - `readyagents new` overwrite refusal is covered on the CLI (existing `workflow.yaml` / README / `.env.example`)
 - `readyagents run PATH --log-level DEBUG` is accepted (same flag as the root callback)
 - MCP tools cannot shadow sandbox `read_file`; stdio children do not inherit API keys by default
