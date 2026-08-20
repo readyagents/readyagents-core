@@ -4,6 +4,7 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+- `readyagents run PATH --log-level DEBUG` is accepted (same flag as the root callback)
 - MCP tools cannot shadow sandbox `read_file`; stdio children do not inherit API keys by default
 - `runs list` prints each run once (one `run_id:` line; `--json` unchanged)
 - Nested `include` approval pauses the parent run; `resume --approve <child-id>` continues it

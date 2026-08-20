@@ -91,7 +91,7 @@ flowchart LR
 | `readyagents init` | Write `.env` from `.env.example` if missing |
 | `readyagents new [name] [--template basic\|approval\|research\|pipeline\|review]` | Scaffold workflow + README + `.env.example` |
 | `readyagents validate PATH` | Schema-validate a workflow |
-| `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE] [--reject NODE]` | Execute |
+| `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE] [--reject NODE] [--log-level LEVEL]` | Execute |
 | `readyagents resume RUN_ID [--approve NODE] [--reject NODE]` | Resume a paused or failed run |
 | `readyagents runs list` | List persisted runs |
 | `readyagents runs show RUN_ID` | Node timeline + stored state (`inspect` is an alias) |

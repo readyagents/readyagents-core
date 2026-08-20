@@ -586,6 +586,25 @@ def test_run_help_lists_json() -> None:
     assert "--json" in result.stdout
 
 
+def test_run_accepts_log_level() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "examples/calc_pipeline.yaml",
+            "--log-level",
+            "DEBUG",
+            "--no-persist",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "succeeded" in result.stdout
+    assert "calc_pipeline ok" in result.stdout
+    help_r = runner.invoke(app, ["run", "--help"])
+    assert help_r.exit_code == 0
+    assert "--log-level" in help_r.stdout
+
+
 def test_mcp_serve_invokes_stdio(monkeypatch) -> None:
     # Live `mcp serve` blocks on stdio (server.run(transport="stdio")). Patch the
     # transport so the CLI wiring is covered without hanging the suite.

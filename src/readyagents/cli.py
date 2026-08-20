@@ -241,8 +241,15 @@ def run(
         "--json",
         help="Print the run record as JSON on stdout (no tables).",
     ),
+    log_level: str | None = typer.Option(
+        None,
+        "--log-level",
+        help="DEBUG, INFO, WARNING, or ERROR (same as the root flag).",
+    ),
 ) -> None:
     """Execute a workflow."""
+    if log_level:
+        configure_logging(log_level)
     persist = not no_persist
     try:
         parsed = parse_input_pairs(inputs)
