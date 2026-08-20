@@ -77,7 +77,7 @@ List persisted runs (newest first). Each line includes `run_id`. `--json` prints
 
 ## `readyagents runs show RUN_ID`
 
-Show status, pending node (if paused), **node timeline**, inputs, and outputs. `readyagents runs inspect RUN_ID` is an alias. `--json` prints the stored run record.
+Show status, pending node (if paused), **node timeline**, inputs, and outputs. `readyagents runs inspect RUN_ID` is an alias. `--json` prints the stored run record. Missing or ambiguous ids print `{ok: false, error, message, run_id}` (exit 1).
 
 ## `readyagents runs replay RUN_ID`
 
@@ -98,7 +98,7 @@ Stdio MCP server. Requires `pip install -e ".[mcp]"` from this checkout. See [mc
 
 ## `readyagents packs`
 
-Lists packs discovered via entry points. Empty when only core is installed.
+Lists packs discovered via entry points. Empty when only core is installed. `--json` prints `{ok, packs}` (or `{ok: false, error, message}` if a pack fails to load).
 
 ## `readyagents version`
 
