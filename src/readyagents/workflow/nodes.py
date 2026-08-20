@@ -4,14 +4,24 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+import time
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from readyagents.errors import ApprovalRequired, NodeError, TemplateError, ToolError, WorkflowError
+from readyagents.errors import (
+    ApprovalRequired,
+    NodeError,
+    ReadyAgentsError,
+    TemplateError,
+    ToolError,
+    WorkflowError,
+)
 from readyagents.llm.base import LLMProvider, Message
 from readyagents.llm.registry import get_provider
+from readyagents.logging import get_logger
 from readyagents.tools import ToolRegistry
 from readyagents.workflow.schema import NodeSpec, NodeType, WorkflowSpec
 from readyagents.workflow.state import RunState
@@ -29,6 +39,8 @@ _MAX_INCLUDE_DEPTH = 8
 _MAX_PARALLEL = 8
 # Dry-run still walks the graph; these tools must not hit the network or disk.
 _DRY_RUN_STUB_TOOLS = frozenset({"http_get", "write_file"})
+
+log = get_logger("nodes")
 
 
 class ExecutionContext:
@@ -213,6 +225,80 @@ def _estimate_tokens(*texts: str) -> int:
     return max(1, total // 4)
 
 
+def execute_node_with_policy(
+    node: NodeSpec, state: RunState, ctx: ExecutionContext
+) -> tuple[Any, int]:
+    """Run a node with timeout_seconds / retry. Does not record the result."""
+    retry = node.retry
+    attempts = retry.max_attempts if retry else 1
+    backoff = retry.backoff_seconds if retry else 1.0
+    multiplier = retry.backoff_multiplier if retry else 2.0
+    last_error: BaseException | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return _call_with_timeout(node, state, ctx), attempt
+        except ApprovalRequired:
+            raise
+        except ReadyAgentsError as exc:
+            last_error = exc
+            log.warning(
+                "Node %s attempt %s/%s failed: %s",
+                node.id,
+                attempt,
+                attempts,
+                exc,
+                extra={"run_id": state.run_id, "node_id": node.id},
+            )
+            if attempt >= attempts:
+                break
+            time.sleep(backoff * (multiplier ** (attempt - 1)))
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            log.warning(
+                "Node %s attempt %s/%s failed: %s",
+                node.id,
+                attempt,
+                attempts,
+                exc,
+                extra={"run_id": state.run_id, "node_id": node.id},
+            )
+            if attempt >= attempts:
+                break
+            time.sleep(backoff * (multiplier ** (attempt - 1)))
+
+    if isinstance(last_error, NodeError) and last_error.node_id == node.id:
+        raise last_error
+    message = str(last_error) if last_error else "unknown error"
+    raise NodeError(node.id, message, cause=last_error) from last_error
+
+
+def _call_with_timeout(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
+    if not node.timeout_seconds:
+        return execute_node(node, state, ctx)
+
+    box: dict[str, Any] = {}
+
+    def _worker() -> None:
+        try:
+            box["value"] = execute_node(node, state, ctx)
+        except BaseException as exc:  # noqa: BLE001
+            box["error"] = exc
+
+    thread = threading.Thread(
+        target=_worker,
+        name=f"readyagents-node-{node.id}",
+        daemon=True,
+    )
+    thread.start()
+    thread.join(node.timeout_seconds)
+    if thread.is_alive():
+        raise NodeError(node.id, f"timed out after {node.timeout_seconds}s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dict[str, Any]:
     branches = list(node.branches or [])
     if not branches:
@@ -221,8 +307,11 @@ def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dic
 
     def _one(branch: NodeSpec) -> tuple[str, Any]:
         try:
-            return branch.id, execute_node(branch, state, ctx)
+            output, _attempt = execute_node_with_policy(branch, state, ctx)
+            return branch.id, output
         except ApprovalRequired:
+            raise
+        except NodeError:
             raise
         except Exception as exc:  # noqa: BLE001
             raise NodeError(
