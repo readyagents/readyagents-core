@@ -94,7 +94,7 @@ readyagents runs report <run_id> --out /tmp/run.html
 
 ## `readyagents mcp serve`
 
-Stdio MCP server. Requires `pip install 'readyagents[mcp]'`. See [mcp.md](mcp.md).
+Stdio MCP server. Requires `pip install -e ".[mcp]"` from this checkout. See [mcp.md](mcp.md).
 
 ## `readyagents packs`
 
