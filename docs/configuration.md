@@ -53,7 +53,7 @@ If the node has no explicit `model:` and the default provider has no key, the en
 
 Inspect and resume those records with `readyagents runs list`, `readyagents runs show`, and `readyagents resume`.
 
-Workflow YAML may also set `allow_http: true` and `workspace:`. Either the env flag or the workflow flag enables HTTP.
+Workflow YAML may also set `allow_http: true` and `workspace:`. Either the env flag or the workflow flag enables HTTP. `workspace:` must resolve under `READYAGENTS_WORKSPACE` (cwd by default); it cannot point at `/` or a parent directory.
 
 ## Files you should never commit
 

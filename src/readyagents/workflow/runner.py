@@ -49,6 +49,24 @@ def _format_validation(path: Path, exc: ValidationError) -> str:
     return "\n".join(lines)
 
 
+def confine_under(raw: str | Path, root: Path, *, what: str) -> Path:
+    """Resolve `raw` and refuse anything outside `root` (symlink-aware)."""
+    root = Path(root).resolve()
+    text = str(raw).strip()
+    if not text or "\x00" in text:
+        raise ConfigError(f"{what} must be a path under {root}")
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root):
+        raise ConfigError(
+            f"{what} is outside the workspace: {raw} "
+            f"(resolved to {resolved}, must stay under {root})"
+        )
+    return resolved
+
+
 def merge_inputs(workflow: WorkflowSpec, overrides: Mapping[str, Any] | None) -> dict[str, Any]:
     merged = dict(workflow.input_defaults())
     if overrides:
@@ -79,9 +97,9 @@ def run_workflow_file(
     else:
         merged = merge_inputs(workflow, inputs)
 
-    workspace = Path(workflow.workspace) if workflow.workspace else settings.workspace_path()
-    if not workspace.is_absolute():
-        workspace = (Path.cwd() / workspace).resolve()
+    root = settings.workspace_path()
+    declared = (workflow.workspace or "").strip()
+    workspace = confine_under(declared, root, what="workspace") if declared else root
     allow_http = bool(workflow.allow_http or settings.allow_http)
 
     tools = default_registry(allow_http=allow_http, workspace=workspace)

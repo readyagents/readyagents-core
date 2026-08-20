@@ -34,7 +34,7 @@ readyagents run hello.yaml --input name=Ada
 | `edges` | Optional `{from, to, when}` routing |
 | `mcp_servers` | Map of name → `{command, args, env, cwd}` |
 | `allow_http` | Enable builtin `http_get` |
-| `workspace` | Override sandbox directory |
+| `workspace` | Sandbox directory; must stay under `READYAGENTS_WORKSPACE` (default: cwd) |
 | `default_model` | Override `READYAGENTS_DEFAULT_MODEL` for agent nodes |
 
 ## Node fields (all types)

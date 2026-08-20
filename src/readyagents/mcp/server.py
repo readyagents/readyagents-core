@@ -46,7 +46,7 @@ def construct_server(*, allow_http: bool | None = None, workspace: Path | None =
     root = workspace or settings.workspace_path()
     tools = {t.name: t for t in builtin_tools(allow_http=allow, workspace=root)}
     server = _create_server("readyagents")
-    _register_server_tools(server, tools)
+    _register_server_tools(server, tools, workspace=Path(root))
     return server
 
 
@@ -55,7 +55,8 @@ def serve_stdio(*, allow_http: bool | None = None, workspace: Path | None = None
     construct_server(allow_http=allow_http, workspace=workspace).run(transport="stdio")
 
 
-def _register_server_tools(server: Any, tools: dict[str, Any]) -> None:
+def _register_server_tools(server: Any, tools: dict[str, Any], *, workspace: Path) -> None:
+    root = Path(workspace).resolve()
     @server.tool(name="now", description=tools["now"].description)
     def now() -> str:
         return str(tools["now"].run())
@@ -87,13 +88,20 @@ def _register_server_tools(server: Any, tools: dict[str, Any]) -> None:
 
     @server.tool()
     def run_workflow(path: str, inputs_json: str = "{}") -> str:
-        """Run a ReadyAgents workflow file. `inputs_json` is a JSON object of inputs."""
+        """Run a ReadyAgents workflow file under the server workspace."""
         import json
 
-        from readyagents.workflow.runner import run_workflow_file
+        from readyagents.config import get_settings
+        from readyagents.errors import ConfigError
+        from readyagents.workflow.runner import confine_under, run_workflow_file
 
         data = json.loads(inputs_json) if inputs_json else {}
         if not isinstance(data, dict):
             raise ValueError("inputs_json must be a JSON object")
-        state = run_workflow_file(Path(path), inputs=data)
+        try:
+            wf_path = confine_under(path, root, what="workflow")
+        except ConfigError as exc:
+            raise MCPError(str(exc)) from exc
+        bound = get_settings().model_copy(update={"workspace": Path(root)})
+        state = run_workflow_file(wf_path, inputs=data, settings=bound)
         return json.dumps(state.to_record(), ensure_ascii=False)

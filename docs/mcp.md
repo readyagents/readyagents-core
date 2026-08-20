@@ -47,7 +47,7 @@ readyagents mcp serve
 
 Speaks MCP over **stdio**. Other agents can call `now`, `calc`, `json_get`, `read_file`, `write_file`, `http_get` (if enabled), and `run_workflow`.
 
-`run_workflow` takes `path` (workflow file) and `inputs_json` (JSON object).
+`run_workflow` takes `path` (workflow file) and `inputs_json` (JSON object). `path` must stay under the server workspace (the same sandbox as `read_file` / `write_file`).
 
 Point your MCP host at the `readyagents` CLI command. Example Claude Desktop / host config sketch:
 
@@ -65,5 +65,7 @@ Point your MCP host at the `readyagents` CLI command. Example Claude Desktop / h
 ## Security notes
 
 - `read_file` / `write_file` cannot escape the workspace directory
+- YAML `workspace:` cannot relocate the sandbox outside `READYAGENTS_WORKSPACE`
+- MCP `run_workflow` only loads a workflow file under that same root
 - `http_get` is opt-in
 - `calc` does not evaluate arbitrary Python

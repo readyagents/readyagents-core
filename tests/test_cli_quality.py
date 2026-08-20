@@ -414,6 +414,66 @@ nodes:
     clear_settings_cache()
 
 
+def test_workspace_yaml_cannot_escape(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    monkeypatch.setenv("READYAGENTS_WORKSPACE", str(tmp_path))
+    leaked = tmp_path.parent / f"ra-leaked-{tmp_path.name}.txt"
+    wf = tmp_path / "escape.yaml"
+    wf.write_text(
+        f"""
+name: escape
+workspace: {tmp_path.parent}
+start: write
+nodes:
+  - id: write
+    type: tool
+    tool: write_file
+    arguments:
+      path: ra-leaked-{tmp_path.name}.txt
+      content: leaked
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["run", str(wf), "--no-persist"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    text = result.stdout + result.stderr
+    assert "ConfigError" in text
+    assert "outside the workspace" in text
+    assert not leaked.exists()
+    clear_settings_cache()
+
+
+def test_workspace_subdir_still_writes(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_HOME", str(tmp_path / ".readyagents"))
+    monkeypatch.setenv("READYAGENTS_WORKSPACE", str(tmp_path))
+    (tmp_path / "out").mkdir()
+    wf = tmp_path / "sub.yaml"
+    wf.write_text(
+        """
+name: sub
+workspace: out
+start: write
+nodes:
+  - id: write
+    type: tool
+    tool: write_file
+    arguments:
+      path: stamp.txt
+      content: ok
+    output_key: written
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["run", str(wf), "--no-persist"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (tmp_path / "out" / "stamp.txt").read_text(encoding="utf-8") == "ok"
+    clear_settings_cache()
+
+
 def test_run_missing_file_exits_1_not_pause_2(tmp_path: Path) -> None:
     missing = tmp_path / "nope.yaml"
     result = runner.invoke(app, ["run", str(missing), "--no-persist"])

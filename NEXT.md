@@ -63,7 +63,7 @@ prints OK. Detect cycles at schema time over `next` / `then` / `else` / `edges`
 message mentions `Cycle`. Sequential and branching acyclic graphs still
 validate.
 
-### 6. Confine YAML `workspace:` (and MCP `run_workflow` paths)
+### 6. Confine YAML `workspace:` (and MCP `run_workflow` paths) — shipped
 
 File tools are sandboxed *to* `workspace`, but a workflow may set
 `workspace: /` (or `../…`) and relocate that sandbox. MCP `run_workflow`
