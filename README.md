@@ -157,3 +157,7 @@ Apache License 2.0. See [LICENSE](LICENSE).
 ## Security
 
 Please report vulnerabilities as described in [SECURITY.md](SECURITY.md). Do not commit API keys. Local operator files such as `.env` are gitignored.
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, and PR conventions, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
