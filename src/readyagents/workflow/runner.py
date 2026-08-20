@@ -97,7 +97,12 @@ def run_workflow_file(
     else:
         merged = merge_inputs(workflow, inputs)
 
-    root = settings.workspace_path()
+    source_path = Path(path).resolve()
+    workflow_dir = source_path.parent
+    if settings.workspace is not None:
+        root = settings.workspace_path()
+    else:
+        root = workflow_dir
     declared = (workflow.workspace or "").strip()
     workspace = confine_under(declared, root, what="workspace") if declared else root
     allow_http = bool(workflow.allow_http or settings.allow_http)
@@ -120,7 +125,6 @@ def run_workflow_file(
     def _save(state: RunState) -> None:
         persist_run(state, runs_dir)
 
-    source_path = Path(path).resolve() if Path(path).exists() else Path(path)
     ctx = ExecutionContext(
         workflow,
         tools,
