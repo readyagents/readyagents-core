@@ -38,6 +38,9 @@ _HTTP_TIMEOUT = 20
 _MAX_HTTP_BYTES = 1_000_000
 _MAX_HTTP_REDIRECTS = 5
 _MAX_POW_EXP = 32
+_MAX_FILE_BYTES = 1_000_000
+_MAX_JSON_BYTES = 1_000_000
+_MAX_CALC_CHARS = 256
 _BLOCKED_HOST_NAMES = frozenset(
     {
         "localhost",
@@ -128,6 +131,8 @@ def tool_calc(expression: str | int | float) -> int | float:
     text = str(expression).strip()
     if not text:
         raise ToolError("calc: empty expression")
+    if len(text) > _MAX_CALC_CHARS:
+        raise ToolError(f"calc: expression too long (max {_MAX_CALC_CHARS} characters)")
     try:
         tree = ast.parse(text, mode="eval")
     except SyntaxError as exc:
@@ -159,8 +164,12 @@ def _eval_ast(node: ast.AST) -> int | float:
 def tool_json_get(data: Any, path: str) -> Any:
     current: Any = data
     if isinstance(current, (bytes, bytearray)):
+        if len(current) > _MAX_JSON_BYTES:
+            raise ToolError(f"json_get: data too large (max {_MAX_JSON_BYTES} bytes)")
         current = current.decode("utf-8")
     if isinstance(current, str):
+        if len(current.encode("utf-8")) > _MAX_JSON_BYTES:
+            raise ToolError(f"json_get: data too large (max {_MAX_JSON_BYTES} bytes)")
         text = current.strip()
         if text:
             try:
@@ -281,7 +290,14 @@ def tool_read_file(path: str, *, workspace: Path) -> str:
     if not target.is_file():
         raise ToolError(f"read_file: not a file: {path}")
     try:
+        size = target.stat().st_size
+        if size > _MAX_FILE_BYTES:
+            raise ToolError(
+                f"read_file: file too large ({size} bytes, max {_MAX_FILE_BYTES})"
+            )
         return target.read_text(encoding="utf-8")
+    except ToolError:
+        raise
     except (OSError, UnicodeError) as exc:
         raise ToolError(f"read_file: could not read {path}: {exc}") from exc
 
@@ -290,11 +306,17 @@ def tool_write_file(path: str, content: str, *, workspace: Path) -> str:
     target = _sandbox_path(path, workspace)
     if target.exists() and not target.is_file():
         raise ToolError(f"write_file: not a file: {path}")
+    payload = str(content)
+    size = len(payload.encode("utf-8"))
+    if size > _MAX_FILE_BYTES:
+        raise ToolError(
+            f"write_file: content too large ({size} bytes, max {_MAX_FILE_BYTES})"
+        )
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         tmp = target.parent / f".{target.name}.{uuid4().hex}.tmp"
         try:
-            tmp.write_text(str(content), encoding="utf-8")
+            tmp.write_text(payload, encoding="utf-8")
             os.replace(tmp, target)
         finally:
             if tmp.exists():
