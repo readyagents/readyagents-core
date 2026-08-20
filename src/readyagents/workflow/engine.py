@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import threading
-import time
 from collections.abc import Mapping
 from typing import Any
 
-from readyagents.errors import ApprovalRequired, NodeError, ReadyAgentsError, WorkflowError
+from readyagents.errors import ApprovalRequired, ReadyAgentsError, WorkflowError
 from readyagents.logging import get_logger
-from readyagents.workflow.nodes import ExecutionContext, evaluate_condition, execute_node
+from readyagents.workflow.nodes import (
+    ExecutionContext,
+    evaluate_condition,
+    execute_node_with_policy,
+)
 from readyagents.workflow.schema import NodeSpec, NodeType, WorkflowSpec
 from readyagents.workflow.state import RunState, utc_now
 
@@ -124,85 +126,17 @@ def _persist(ctx: ExecutionContext, state: RunState) -> None:
 
 
 def _execute_with_policy(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> None:
-    retry = node.retry
-    attempts = retry.max_attempts if retry else 1
-    backoff = retry.backoff_seconds if retry else 1.0
-    multiplier = retry.backoff_multiplier if retry else 2.0
-    last_error: BaseException | None = None
     started = utc_now()
-
-    for attempt in range(1, attempts + 1):
-        try:
-            output = _call_with_timeout(node, state, ctx)
-            state.record(
-                node.id,
-                output,
-                node_type=str(node.type),
-                output_key=node.output_key,
-                attempts=attempt,
-                started_at=started,
-                finished_at=utc_now(),
-            )
-            return
-        except ApprovalRequired:
-            raise
-        except ReadyAgentsError as exc:
-            last_error = exc
-            log.warning(
-                "Node %s attempt %s/%s failed: %s",
-                node.id,
-                attempt,
-                attempts,
-                exc,
-                extra={"run_id": state.run_id, "node_id": node.id},
-            )
-            if attempt >= attempts:
-                break
-            time.sleep(backoff * (multiplier ** (attempt - 1)))
-        except Exception as exc:  # noqa: BLE001
-            last_error = exc
-            log.warning(
-                "Node %s attempt %s/%s failed: %s",
-                node.id,
-                attempt,
-                attempts,
-                exc,
-                extra={"run_id": state.run_id, "node_id": node.id},
-            )
-            if attempt >= attempts:
-                break
-            time.sleep(backoff * (multiplier ** (attempt - 1)))
-
-    if isinstance(last_error, NodeError) and last_error.node_id == node.id:
-        raise last_error
-    message = str(last_error) if last_error else "unknown error"
-    raise NodeError(node.id, message, cause=last_error) from last_error
-
-
-def _call_with_timeout(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
-    if not node.timeout_seconds:
-        return execute_node(node, state, ctx)
-
-    box: dict[str, Any] = {}
-
-    def _worker() -> None:
-        try:
-            box["value"] = execute_node(node, state, ctx)
-        except BaseException as exc:  # noqa: BLE001
-            box["error"] = exc
-
-    thread = threading.Thread(
-        target=_worker,
-        name=f"readyagents-node-{node.id}",
-        daemon=True,
+    output, attempt = execute_node_with_policy(node, state, ctx)
+    state.record(
+        node.id,
+        output,
+        node_type=str(node.type),
+        output_key=node.output_key,
+        attempts=attempt,
+        started_at=started,
+        finished_at=utc_now(),
     )
-    thread.start()
-    thread.join(node.timeout_seconds)
-    if thread.is_alive():
-        raise NodeError(node.id, f"timed out after {node.timeout_seconds}s")
-    if "error" in box:
-        raise box["error"]
-    return box["value"]
 
 
 def _uses_explicit_routing(workflow: WorkflowSpec) -> bool:
