@@ -1,0 +1,21 @@
+name: connector_demo
+version: "1"
+description: >
+  Requires the example connector pack (examples/packs/connector_pack.py).
+  Core discovers it via the readyagents.packs entry point when the pack is
+  installed; tests inject the pack in-process.
+
+start: ping
+nodes:
+  - id: ping
+    type: tool
+    tool: connector_ping
+    arguments:
+      message: "hello"
+    output_key: hit
+    next: wrap
+
+  - id: wrap
+    type: transform
+    template: "connector_demo ok: {{hit.message}}"
+    output_key: summary

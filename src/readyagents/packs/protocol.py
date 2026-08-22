@@ -45,3 +45,11 @@ class BasePack:
 
     def register_workflows(self) -> Sequence[Any]:
         return []
+
+    def register_secrets(self) -> Sequence[Any]:
+        """Optional secrets-manager backends (Vault/AWS live in packs, not core)."""
+        return []
+
+    def register_authorizers(self) -> Sequence[Any]:
+        """Optional RBAC hooks. Default in core is allow-all."""
+        return []

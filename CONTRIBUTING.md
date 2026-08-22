@@ -16,6 +16,7 @@ pip install -e ".[dev]"
 make test
 make lint
 make run-example
+make smoke
 ```
 
 `make lint` is `ruff check` plus `ruff format --check`. `make run-example` smokes `calc_pipeline`, `approval_gate`, and `composed_gate` (keyless).
@@ -32,7 +33,9 @@ readyagents run examples/composed_gate.yaml --approve gate
 ```
 
 Tests must not use the network or real API keys. Mock LLM providers.
-Approval nodes must be driven with `--approve` / `--reject` (or `ExecutionContext.decisions`) — never a blocking prompt.
+Approval nodes must be driven with `--approve` / `--reject`, `readyagents decide --file`, or `ExecutionContext.decisions` — never a blocking prompt.
+
+Use `readyagents.testing` (`ScriptedLLM`, `RecordedLLM`, `run_workflow_spec`, `run_eval`) instead of live vendors.
 
 ## Guidelines
 

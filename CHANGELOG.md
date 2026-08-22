@@ -9,29 +9,36 @@ All notable changes to ReadyAgents Core.
 - Parallel branches honor `timeout_seconds` and `retry`
 - `http_get` connects only to IPs already classified public (DNS rebind)
 - Builtin `calc` / `json_get` / `read_file` / `write_file` reject oversized inputs
-- `readyagents new` overwrite refusal is covered on the CLI (existing `workflow.yaml` / README / `.env.example`)
-- `readyagents run PATH --log-level DEBUG` is accepted (same flag as the root callback)
-- MCP tools cannot shadow sandbox `read_file`; stdio children do not inherit API keys by default
-- `runs list` prints each run once (one `run_id:` line; `--json` unchanged)
-- Nested `include` approval pauses the parent run; `resume --approve <child-id>` continues it
-- YAML `workspace:` and MCP `run_workflow` paths stay under the settings workspace
-- `validate` rejects cyclic graphs (`next` / `then` / `else` / `edges`)
-- Successful runs print `run_id:` (same copy-paste line as failed/paused runs)
-- Missing workflow path is `ConfigError` (exit 1), not Typer usage error (exit 2)
-- Node `timeout_seconds` returns when the budget expires (does not wait for the worker)
-- `--dry-run` stubs `write_file` (and `http_get`); it no longer mutates the workspace
-- Missing `required_inputs` list the keys and show `Pass --input KEY=...`
-- `readyagents validate --json`; validate table shows `then`/`else`; duplicate parallel branch ids are rejected
-- Opt-in `http_get` refuses loopback, private, link-local, and metadata hosts (including redirects) and sends `User-Agent: readyagents/<version>`
-- Failed runs print the node timeline, `run_id`, and a `resume` hint; `run` / `resume` / `replay` accept `--json` (stdout, no Rich markup)
-- Resume applies `--input` overrides to stored inputs (retry a failed node with new values)
-- File tools refuse workspace escapes (absolute paths, `..`, symlinks) and write atomically; `include` paths stay under the parent workflow directory
-- Implicit default model uses the BYOK provider that has a key (explicit `model:` is unchanged)
-- `readyagents new` defaults to the keyless `pipeline` template (`--template approval` still works)
-- HTML run reports: `readyagents runs report RUN_ID`
-- Extra `readyagents new` templates: `pipeline`, `review`
-- Example `examples/composed_gate.yaml` (include + parallel + approval)
-- Clearer errors for unknown node types, missing includes, and parallel branch failures
+
+## 0.3.0 — 2026-08-22
+
+### Added
+
+- **Structured JSON logs** (`--log-format json` / `READYAGENTS_LOG_FORMAT=json`) with `run` and `node` on every event
+- **Per-node token/cost tracking** rolled up on the run (`usage.prompt_tokens`, `completion_tokens`, `cost_micros`). Include nodes count nested agent usage once; parallel branches merge onto the fan-out node.
+- **Budget limits** (`budget.max_tokens` / `budget.max_cost_usd` or env) stop further LLM work with `BudgetExceeded`
+- **Model fallback** (`fallback_models` on the node or workflow) and a process-local **circuit breaker**
+- **External decision injection:** `readyagents decide RUN_ID --file decisions.json` and `--decision-file` on `run`/`resume` (no always-on HTTP listener). Outbound `on_pause_url` notify only
+- **Multi-gate example** `examples/multi_gate.yaml` (two sequential approvals)
+- **Secrets-manager hooks** (env/`.env` remains default BYOK; packs may register backends)
+- **Append-only audit trail** under `$READYAGENTS_HOME/audit/<run_id>.jsonl`
+- **RBAC hooks** (`--actor`, pack `register_authorizers`) and optional **PII redaction**
+- **Pydantic `output_schema`** on agent nodes (`StructuredOutputError` on mismatch)
+- **Opt-in local LLM cache** (`READYAGENTS_LLM_CACHE=1`, `--no-cache` to skip)
+- **Example connector pack** (`examples/packs/connector_pack.py`) proving the pack seam
+- **`readyagents.testing`**: `run_workflow_spec`, `ScriptedLLM`, `RecordedLLM`, `run_eval`
+- Official **Dockerfile** + **docker-compose.yml**; `make smoke` / `make ci` cover lint, tests, and keyless examples (dry-run, resume, approval, parallel, include)
+
+### Reliability (folded from post-0.2.0)
+
+- `readyagents new` overwrite refusal; `--log-level` on `run`; MCP tools cannot shadow sandbox `read_file`
+- Nested `include` approval pauses the parent; `validate` rejects cycles; success prints `run_id:`
+- Missing workflow path is `ConfigError` (exit 1); `--dry-run` stubs `write_file`; node timeouts return when the budget expires
+- `http_get` refuses private/loopback/metadata hosts; file tools and `include` stay sandboxed
+
+### Safety
+
+- Core still has no always-on listener, scheduler, hosted control plane, extra database, or vendor secrets SDK. Those remain pack material.
 
 ## 0.2.0 — 2026-08-19
 

@@ -10,10 +10,10 @@ from readyagents.config import clear_settings_cache
 
 runner = CliRunner()
 
+
 def _plain(text: str) -> str:
     """Strip ANSI and whitespace so Rich wrapping cannot hide tokens."""
     return re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", text))
-
 
 
 def _run_id(text: str) -> str:
@@ -36,7 +36,7 @@ def test_help() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "0.2.0" in result.stdout
+    assert "0.3.0" in result.stdout
 
 
 def test_packs_none_installed() -> None:
@@ -83,6 +83,7 @@ def test_help_lists_new_and_runs() -> None:
     assert "new" in result.stdout
     assert "runs" in result.stdout
     assert "resume" in result.stdout
+    assert "decide" in result.stdout
 
 
 def test_new_writes_starter_tree(tmp_path: Path) -> None:
@@ -111,9 +112,7 @@ def test_new_writes_starter_tree(tmp_path: Path) -> None:
 
 def test_new_template_approval(tmp_path: Path) -> None:
     dest = tmp_path / "gated"
-    result = runner.invoke(
-        app, ["new", "gated", "--dest", str(dest), "--template", "approval"]
-    )
+    result = runner.invoke(app, ["new", "gated", "--dest", str(dest), "--template", "approval"])
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "type: approval" in (dest / "workflow.yaml").read_text(encoding="utf-8")
     gated = runner.invoke(
@@ -260,9 +259,7 @@ def test_new_refuses_overwrite(tmp_path: Path) -> None:
 
 
 def test_new_unknown_template(tmp_path: Path) -> None:
-    result = runner.invoke(
-        app, ["new", "x", "--dest", str(tmp_path / "x"), "--template", "nope"]
-    )
+    result = runner.invoke(app, ["new", "x", "--dest", str(tmp_path / "x"), "--template", "nope"])
     assert result.exit_code == 1
     assert "Unknown template" in result.stdout + result.stderr
 

@@ -28,6 +28,20 @@ class RetrySpec(BaseModel):
     backoff_multiplier: float = Field(default=2.0, ge=1.0)
 
 
+class BudgetSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    max_tokens: int | None = Field(default=None, ge=0)
+    max_cost_usd: float | None = Field(default=None, ge=0)
+
+
+class CircuitSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    failure_threshold: int = Field(default=3, ge=1)
+    cooldown_seconds: float = Field(default=60.0, ge=0)
+
+
 class MCPServerSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,6 +90,11 @@ class NodeSpec(BaseModel):
     # include (sub-workflow)
     path: str | None = None
     call_inputs: dict[str, Any] = Field(default_factory=dict, alias="inputs")
+
+    # agent extras
+    fallback_models: list[str] = Field(default_factory=list)
+    output_schema: dict[str, Any] | None = None
+    cache: bool | None = None
 
     @field_validator("id")
     @classmethod
@@ -149,6 +168,12 @@ class WorkflowSpec(BaseModel):
     allow_http: bool = False
     workspace: str | None = None
     default_model: str | None = None
+    budget: BudgetSpec | None = None
+    fallback_models: list[str] = Field(default_factory=list)
+    circuit: CircuitSpec | None = None
+    on_pause_url: str | None = None
+    cache_llm: bool | None = None
+    redact: bool | None = None
 
     @model_validator(mode="after")
     def _graph(self) -> WorkflowSpec:

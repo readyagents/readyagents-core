@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -28,6 +29,7 @@ class NodeResult:
     attempts: int = 1
     started_at: str = ""
     finished_at: str = ""
+    usage: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -47,6 +49,8 @@ class RunState:
     usage: dict[str, int] = field(default_factory=dict)
     started_at: str = field(default_factory=utc_now)
     finished_at: str | None = None
+    _last_node_usage: dict[str, int] = field(default_factory=dict, repr=False, compare=False)
+    _usage_lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     @classmethod
     def start(
@@ -86,6 +90,7 @@ class RunState:
         attempts: int = 1,
         started_at: str = "",
         finished_at: str = "",
+        usage: Mapping[str, int] | None = None,
     ) -> None:
         self.node_outputs[node_id] = output
         if output_key:
@@ -99,6 +104,7 @@ class RunState:
                 attempts=attempts,
                 started_at=started_at,
                 finished_at=finished_at,
+                usage={str(k): int(v) for k, v in dict(usage or {}).items()},
             )
         )
 
@@ -122,14 +128,30 @@ class RunState:
         self.finished_at = utc_now()
 
     def add_usage(self, **amounts: Any) -> None:
-        for key, raw in amounts.items():
-            if raw is None:
-                continue
-            try:
-                n = int(raw)
-            except (TypeError, ValueError):
-                continue
-            self.usage[key] = int(self.usage.get(key, 0)) + n
+        cleaned = _clean_usage(amounts)
+        if not cleaned:
+            return
+        with self._usage_lock:
+            _add_usage_into(self.usage, cleaned)
+
+    def note_node_usage(self, amounts: Mapping[str, Any], *, rollup: bool = True) -> None:
+        """Attach usage to the current node. Accumulates so parallel branches merge."""
+        cleaned = _clean_usage(amounts)
+        if not cleaned:
+            return
+        with self._usage_lock:
+            _add_usage_into(self._last_node_usage, cleaned)
+            if rollup:
+                _add_usage_into(self.usage, cleaned)
+
+    def take_node_usage(self) -> dict[str, int]:
+        with self._usage_lock:
+            usage = dict(self._last_node_usage)
+            self._last_node_usage = {}
+            return usage
+
+    def node_usage_map(self) -> dict[str, dict[str, int]]:
+        return {r.node_id: dict(r.usage) for r in self.results if r.usage}
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -153,6 +175,7 @@ class RunState:
                     "attempts": r.attempts,
                     "started_at": r.started_at,
                     "finished_at": r.finished_at,
+                    "usage": dict(r.usage),
                 }
                 for r in self.results
             ],
@@ -173,6 +196,11 @@ class RunState:
                 attempts=int(row.get("attempts") or 1),
                 started_at=str(row.get("started_at") or ""),
                 finished_at=str(row.get("finished_at") or ""),
+                usage={
+                    str(k): int(v)
+                    for k, v in dict(row.get("usage") or {}).items()
+                    if _is_intlike(v)
+                },
             )
             for row in data.get("node_results") or []
             if isinstance(row, Mapping)
@@ -194,12 +222,15 @@ class RunState:
         )
 
 
-def persist_run(state: RunState, runs_dir: Path) -> Path:
+def persist_run(state: RunState, runs_dir: Path, *, redactor: Any | None = None) -> Path:
     """Atomically write `<run_id>.json` (temp file + os.replace)."""
     runs_dir.mkdir(parents=True, exist_ok=True)
     path = runs_dir / f"{state.run_id}.json"
     tmp = runs_dir / f".{state.run_id}.{uuid4().hex}.json.tmp"
-    record = json.dumps(state.to_record(), indent=2, ensure_ascii=False) + "\n"
+    record_obj: Any = state.to_record()
+    if redactor is not None:
+        record_obj = redactor.redact(record_obj)
+    record = json.dumps(record_obj, indent=2, ensure_ascii=False) + "\n"
     try:
         tmp.write_text(record, encoding="utf-8")
         os.replace(tmp, path)
@@ -274,6 +305,66 @@ def build_decisions(approve: list[str], reject: list[str]) -> dict[str, str]:
     for node_id in reject:
         decisions[node_id] = "reject"
     return decisions
+
+
+def parse_decision_payload(data: Any) -> dict[str, str]:
+    """Accept a few JSON shapes used by external decision injection."""
+    if data is None:
+        return {}
+    if isinstance(data, Mapping):
+        if "decisions" in data and isinstance(data["decisions"], Mapping):
+            return {str(k): str(v).strip().lower() for k, v in data["decisions"].items()}
+        if "decisions" in data and isinstance(data["decisions"], list):
+            return parse_decision_payload(data["decisions"])
+        node = data.get("node_id") or data.get("node") or data.get("id")
+        decision = data.get("decision") or data.get("value")
+        if node and decision is not None:
+            return {str(node): str(decision).strip().lower()}
+        return {str(k): str(v).strip().lower() for k, v in data.items() if v is not None}
+    if isinstance(data, list):
+        merged: dict[str, str] = {}
+        for item in data:
+            merged.update(parse_decision_payload(item))
+        return merged
+    raise WorkflowError("Decision payload must be a JSON object or list")
+
+
+def load_decision_file(path: Path | str) -> dict[str, str]:
+    file = Path(path)
+    if not file.is_file():
+        from readyagents.errors import ConfigError
+
+        raise ConfigError(f"Decision file not found: {file}")
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise WorkflowError(f"Decision file {file} is not valid JSON: {exc}") from exc
+    return parse_decision_payload(data)
+
+
+def _clean_usage(amounts: Mapping[str, Any] | None) -> dict[str, int]:
+    cleaned: dict[str, int] = {}
+    for key, raw in dict(amounts or {}).items():
+        if raw is None:
+            continue
+        try:
+            cleaned[str(key)] = int(raw)
+        except (TypeError, ValueError):
+            continue
+    return cleaned
+
+
+def _add_usage_into(target: dict[str, int], amounts: Mapping[str, int]) -> None:
+    for key, value in amounts.items():
+        target[key] = int(target.get(key, 0)) + int(value)
+
+
+def _is_intlike(value: Any) -> bool:
+    try:
+        int(value)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def _jsonable(value: Any) -> Any:

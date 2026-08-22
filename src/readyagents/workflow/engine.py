@@ -5,8 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from readyagents.errors import ApprovalRequired, ReadyAgentsError, WorkflowError
-from readyagents.logging import get_logger
+from readyagents.errors import (
+    ApprovalRequired,
+    AuthorizationError,
+    BudgetExceeded,
+    CircuitOpen,
+    ReadyAgentsError,
+    WorkflowError,
+)
+from readyagents.logging import get_logger, log_event
 from readyagents.workflow.nodes import (
     ExecutionContext,
     evaluate_condition,
@@ -40,8 +47,20 @@ def run_workflow(
         if metadata:
             state.metadata.update(dict(metadata))
 
-    extra = {"run_id": state.run_id, "node_id": "-"}
-    log.info("run %s status=%s", state.run_id, state.status, extra=extra)
+    if ctx.usage_state is None:
+        ctx.usage_state = state
+    log_event(
+        log,
+        "run_start",
+        "run %s status=%s",
+        state.run_id,
+        state.status,
+        run_id=state.run_id,
+        node_id="-",
+        status=state.status,
+    )
+    if ctx.auditor is not None:
+        ctx.auditor("run_started", run_id=state.run_id, workflow=workflow.name, actor=ctx.actor)
 
     steps = 0
     try:
@@ -55,26 +74,48 @@ def run_workflow(
                 raise WorkflowError(f"Unknown node '{current}'")
             node = nodes[current]
             seen.add(current)
-            log.info(
+            log_event(
+                log,
+                "node_start",
                 "node %s (%s)",
                 node.id,
                 node.type,
-                extra={"run_id": state.run_id, "node_id": node.id},
+                run_id=state.run_id,
+                node_id=node.id,
             )
             _execute_with_policy(node, state, ctx)
             state.pending_node = None
             _persist(ctx, state)
+            if ctx.auditor is not None:
+                ctx.auditor(
+                    "node_ok",
+                    run_id=state.run_id,
+                    node_id=node.id,
+                    node_type=str(node.type),
+                    actor=ctx.actor,
+                )
             current = _next_node(workflow, node, state)
         state.pending_node = None
         state.finish("succeeded")
         _persist(ctx, state)
+        if ctx.auditor is not None:
+            ctx.auditor("run_finished", run_id=state.run_id, status="succeeded", actor=ctx.actor)
     except ApprovalRequired as exc:
         state.pending_node = current
         state.finish("paused")
         _persist(ctx, state)
         exc.state = state
+        if ctx.auditor is not None:
+            ctx.auditor(
+                "paused",
+                run_id=state.run_id,
+                node_id=exc.node_id,
+                actor=ctx.actor,
+            )
+        _notify_pause(ctx, exc, state)
         raise
     except ReadyAgentsError as exc:
+        state.take_node_usage()
         state.pending_node = current
         state.record_error(
             current or "?",
@@ -86,6 +127,14 @@ def run_workflow(
         exc.state = state
         if not exc.run_id:
             exc.run_id = state.run_id
+        if ctx.auditor is not None:
+            ctx.auditor(
+                "run_finished",
+                run_id=state.run_id,
+                status="failed",
+                node_id=current,
+                actor=ctx.actor,
+            )
         raise
     return state
 
@@ -125,9 +174,27 @@ def _persist(ctx: ExecutionContext, state: RunState) -> None:
     ctx.on_persist(state)
 
 
+def _notify_pause(ctx: ExecutionContext, exc: ApprovalRequired, state: RunState) -> None:
+    if ctx.on_pause is None:
+        return
+    try:
+        ctx.on_pause(exc, state)
+    except Exception as notify_exc:  # noqa: BLE001
+        log.warning(
+            "pause notify failed: %s",
+            notify_exc,
+            extra={"run_id": state.run_id, "node_id": exc.node_id, "event": "pause_notify_error"},
+        )
+
+
 def _execute_with_policy(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> None:
     started = utc_now()
-    output, attempt = execute_node_with_policy(node, state, ctx)
+    try:
+        output, attempt = execute_node_with_policy(node, state, ctx)
+    except (BudgetExceeded, AuthorizationError, CircuitOpen):
+        state.take_node_usage()
+        raise
+    usage = state.take_node_usage()
     state.record(
         node.id,
         output,
@@ -136,6 +203,7 @@ def _execute_with_policy(node: NodeSpec, state: RunState, ctx: ExecutionContext)
         attempts=attempt,
         started_at=started,
         finished_at=utc_now(),
+        usage=usage,
     )
 
 

@@ -30,6 +30,12 @@ class ContinuousPack(BasePack):
 
     def register_workflows(self):
         return []  # optional bundled workflow paths or dicts
+
+    def register_secrets(self):
+        return []  # optional SecretsBackend objects (Vault/AWS belong here, not in core)
+
+    def register_authorizers(self):
+        return []  # optional RBAC hooks; core default is allow-all
 ```
 
 `register_nodes()` values should expose `type_name` and `execute(node, state, context)`.
@@ -63,7 +69,9 @@ The engine calls `discover_packs()` at run start and merges tools/node handlers.
 
 ## Design rule
 
-Packs **compose on top** of core. They must not fork the engine. Always-on / continuous execution, hosted control planes, and premium connectors belong in packs — not in `readyagents-core`.
+Packs **compose on top** of core. They must not fork the engine. Always-on / continuous execution, hosted control planes, inbound webhook listeners, and premium connectors belong in packs — not in `readyagents-core`.
+
+An in-tree example connector (local, no network) lives at `examples/packs/connector_pack.py` and registers the `connector_ping` tool. Tests inject it; core’s `readyagents.packs` entry-point group stays empty.
 
 List what is installed:
 

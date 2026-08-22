@@ -24,23 +24,29 @@ _FALLBACK_MODELS = {
 }
 
 
-def _has_key(settings: Settings, provider_name: str) -> bool:
+def _has_key(settings: Settings, provider_name: str, secrets: object = None) -> bool:
+    from readyagents.secrets import secret_for_provider
+
     if provider_name == "openai":
-        return bool(settings.api_key_for("openai"))
-    if provider_name == "anthropic":
-        return bool(settings.api_key_for("anthropic"))
-    if provider_name in _COMPAT_NAMES:
-        return bool(settings.api_key_for("openai-compat"))
-    return False
+        name = "openai"
+    elif provider_name == "anthropic":
+        name = "anthropic"
+    elif provider_name in _COMPAT_NAMES:
+        name = "openai-compat"
+    else:
+        return False
+    return bool(secret_for_provider(name, settings=settings, secrets=secrets))
 
 
-def _implicit_fallback_ref(settings: Settings) -> str | None:
+def _implicit_fallback_ref(settings: Settings, secrets: object = None) -> str | None:
     """First provider that actually has a key. None if BYOK is empty."""
-    if settings.api_key_for("openai"):
+    from readyagents.secrets import secret_for_provider
+
+    if secret_for_provider("openai", settings=settings, secrets=secrets):
         return f"openai:{_FALLBACK_MODELS['openai']}"
-    if settings.api_key_for("anthropic"):
+    if secret_for_provider("anthropic", settings=settings, secrets=secrets):
         return f"anthropic:{_FALLBACK_MODELS['anthropic']}"
-    if settings.api_key_for("openai-compat"):
+    if secret_for_provider("openai-compat", settings=settings, secrets=secrets):
         if settings.openai_compat_base_url:
             return f"openai-compat:{_FALLBACK_MODELS['openai-compat']}"
         return f"groq:{_FALLBACK_MODELS['groq']}"
@@ -52,6 +58,7 @@ def get_provider(
     *,
     settings: Settings | None = None,
     implicit: bool = False,
+    secrets: object = None,
 ) -> tuple[LLMProvider, str]:
     """Return `(provider, model_id)` for a `provider:model` string.
 
@@ -63,8 +70,8 @@ def get_provider(
     ref = model_ref or settings.default_model
     provider_name, model_id = parse_model_ref(ref)
 
-    if implicit and not _has_key(settings, provider_name):
-        fallback = _implicit_fallback_ref(settings)
+    if implicit and not _has_key(settings, provider_name, secrets):
+        fallback = _implicit_fallback_ref(settings, secrets)
         if fallback:
             new_provider, new_model = parse_model_ref(fallback)
             log.info(
@@ -76,15 +83,15 @@ def get_provider(
             provider_name, model_id = new_provider, new_model
 
     if provider_name == "openai":
-        key = require_api_key("openai", settings)
+        key = require_api_key("openai", settings, secrets=secrets)
         return OpenAIProvider(key), model_id
 
     if provider_name == "anthropic":
-        key = require_api_key("anthropic", settings)
+        key = require_api_key("anthropic", settings, secrets=secrets)
         return AnthropicProvider(key), model_id
 
     if provider_name in _COMPAT_NAMES:
-        key = require_api_key("openai-compat", settings)
+        key = require_api_key("openai-compat", settings, secrets=secrets)
         base = settings.openai_compat_base_url
         if not base:
             if provider_name == "groq":

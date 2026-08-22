@@ -63,3 +63,36 @@ class ApprovalRequired(ReadyAgentsError):
             f"Resume with: readyagents resume {run_id} --approve {node_id} "
             f"(or --reject {node_id})"
         )
+
+
+class BudgetExceeded(ReadyAgentsError):
+    """An LLM call was blocked because the run is over its token or cost budget."""
+
+    def __init__(self, kind: str, used: int, limit: int) -> None:
+        self.kind = kind
+        self.used = used
+        self.limit = limit
+        super().__init__(f"Budget exceeded: {kind} used={used} limit={limit}")
+
+
+class AuthorizationError(ReadyAgentsError):
+    """An RBAC hook denied run, resume, approve, or reject."""
+
+    def __init__(self, actor: str | None, action: str, resource: str) -> None:
+        self.actor = actor
+        self.action = action
+        self.resource = resource
+        who = actor if actor else "(anonymous)"
+        super().__init__(f"Actor '{who}' is not allowed to {action} '{resource}'")
+
+
+class StructuredOutputError(NodeError):
+    """An agent node's LLM output did not match its Pydantic/JSON schema."""
+
+
+class CircuitOpen(LLMError):
+    """A model is skipped because its circuit breaker is open."""
+
+    def __init__(self, model: str) -> None:
+        self.model = model
+        super().__init__(f"Circuit breaker open for model '{model}'")

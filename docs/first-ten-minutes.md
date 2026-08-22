@@ -28,6 +28,12 @@ readyagents resume <run_id> --reject gate
 
 Same-shot: `readyagents run examples/approval_gate.yaml --approve gate`.
 
+Or inject a JSON decision without `--approve` flags:
+
+```bash
+readyagents decide <run_id> --node gate --decision approve
+```
+
 ## 3. Start your own file
 
 ```bash

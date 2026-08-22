@@ -60,3 +60,23 @@ def collect_pack_nodes(packs: list[Pack] | None = None) -> dict[str, Any]:
         for type_name, handler in (pack.register_nodes() or {}).items():
             handlers[type_name] = handler
     return handlers
+
+
+def collect_pack_secrets(packs: list[Pack] | None = None) -> list[Any]:
+    backends: list[Any] = []
+    for pack in packs if packs is not None else discover_packs():
+        fn = getattr(pack, "register_secrets", None)
+        if not callable(fn):
+            continue
+        backends.extend(list(fn() or []))
+    return backends
+
+
+def collect_pack_authorizers(packs: list[Pack] | None = None) -> list[Any]:
+    authorizers: list[Any] = []
+    for pack in packs if packs is not None else discover_packs():
+        fn = getattr(pack, "register_authorizers", None)
+        if not callable(fn):
+            continue
+        authorizers.extend(list(fn() or []))
+    return authorizers

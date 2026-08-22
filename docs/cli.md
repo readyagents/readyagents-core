@@ -5,6 +5,7 @@ The `readyagents` command is a [Typer](https://typer.tiangolo.com/) app.
 ```bash
 readyagents --help
 readyagents --version
+readyagents --log-format json run examples/calc_pipeline.yaml
 ```
 
 ## `readyagents init`
@@ -54,6 +55,10 @@ readyagents run examples/research_brief.yaml --no-persist
 | `--resume RUN_ID` | Continue a paused/failed run instead of starting fresh |
 | `--json` | Print the run record as JSON on stdout (no tables; scripts/CI) |
 | `--log-level` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `--log-format` | `text` (default) or `json` (machine-parseable events with `run` / `node`) |
+| `--decision-file PATH` | JSON approval decisions (same shapes as `readyagents decide --file`) |
+| `--actor NAME` | Actor id for RBAC hooks (`READYAGENTS_ACTOR`) |
+| `--no-cache` | Skip the local LLM response cache |
 
 Exit code `1` on validation or execution errors, including a missing workflow file (`ConfigError`). Exit code `2` is reserved for an **approval** node pausing for a decision. The CLI prints `ErrorClass: message` rather than a full traceback. Logs include `run=<id>` and `node=<id>`.
 
@@ -69,7 +74,19 @@ Resume a paused or failed run from the last successful node. Uses the workflow p
 readyagents resume abcdef --approve gate
 readyagents resume abcdef --workflow examples/approval_gate.yaml --reject gate
 readyagents resume abcdef --json
+readyagents resume abcdef --decision-file decision.json
 ```
+
+## `readyagents decide RUN_ID`
+
+Inject an approval decision from outside the CLI (a pack, a ticket webhook, a file drop) and resume. Core does **not** run an HTTP server; a pack can receive the webhook and call this.
+
+```bash
+readyagents decide abcdef --node gate --decision approve
+readyagents decide abcdef --file decision.json
+```
+
+Accepted JSON shapes: `{"gate": "approve"}`, `{"node_id": "gate", "decision": "approve"}`, `{"decisions": {"gate": "approve"}}`, or a list of those objects.
 
 ## `readyagents runs list`
 
@@ -109,7 +126,13 @@ Prints the package version.
 ```python
 from pathlib import Path
 from readyagents.workflow.runner import run_workflow_file
+from readyagents.testing import ScriptedLLM, run_workflow_spec
 
 state = run_workflow_file(Path("examples/calc_pipeline.yaml"), persist=False)
 print(state.status, state.output_keys)
+
+state = run_workflow_spec(
+    {"name": "t", "nodes": [{"id": "a", "type": "agent", "prompt": "hi", "output_key": "t"}]},
+    llm=ScriptedLLM().enqueue("ok"),
+)
 ```

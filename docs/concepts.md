@@ -21,7 +21,7 @@ A workflow is a YAML (or JSON) file with:
 | `tool` | Call a named builtin, pack, or MCP tool |
 | `condition` | Branch on a small expression |
 | `transform` | Template, JSON parse, or dotted-path extract |
-| `approval` | Human-in-the-loop gate; pauses until `--approve` / `--reject` |
+| `approval` | Human-in-the-loop gate; pauses until `--approve` / `--reject` or an injected decision |
 | `parallel` | Run independent branch nodes concurrently |
 | `include` | Run another workflow file and take its outputs |
 
@@ -53,7 +53,7 @@ retry:
 
 Failures raise typed errors (`NodeError`, `LLMError`, `MCPError`, `ApprovalRequired`, …) instead of a bare stack dump in the CLI.
 
-Run records are written after each node. Resume a paused or failed run with `readyagents resume <run_id>`. Inspect with `readyagents runs list` and `readyagents runs show <run_id>`. Structured logs include `run=<id>` and `node=<id>`.
+Run records are written after each node. Resume a paused or failed run with `readyagents resume <run_id>` or inject a decision with `readyagents decide`. Inspect with `readyagents runs list` and `readyagents runs show <run_id>`. Structured logs include `run=<id>` and `node=<id>` (JSON format adds `run` / `node` keys). Agent usage is stored per node and rolled up on the run. An append-only audit log lives under `$READYAGENTS_HOME/audit/`.
 
 ## Extension: packs
 

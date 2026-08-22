@@ -1,4 +1,4 @@
-.PHONY: test lint run-example fmt install
+.PHONY: test lint run-example fmt install smoke ci
 
 install:
 	python -m pip install -e ".[dev]"
@@ -18,3 +18,25 @@ run-example:
 	readyagents run examples/calc_pipeline.yaml
 	readyagents run examples/approval_gate.yaml --approve gate
 	readyagents run examples/composed_gate.yaml --approve gate
+
+# Keyless example set used by CI: dry-run, resume, approval, parallel, include.
+smoke:
+	readyagents run examples/calc_pipeline.yaml --no-persist
+	readyagents run examples/approval_gate.yaml --approve gate --no-persist
+	readyagents run examples/fanout_gate.yaml --approve gate --no-persist
+	readyagents run examples/include_demo.yaml --no-persist
+	readyagents run examples/composed_gate.yaml --approve gate --no-persist
+	readyagents run examples/multi_gate.yaml --approve first --approve second --no-persist
+	readyagents run examples/support_triage.yaml --dry-run --no-persist --input message=hello
+	@rm -rf .readyagents-smoke
+	@set -e; \
+	  export READYAGENTS_HOME=.readyagents-smoke; \
+	  set +e; out=$$(readyagents run examples/approval_gate.yaml 2>&1); ec=$$?; set -e; \
+	  printf '%s\n' "$$out"; \
+	  test $$ec -eq 2; \
+	  rid=$$(printf '%s\n' "$$out" | tr '\n' ' ' | sed -n 's/.*resume \([0-9a-f]\{16,\}\).*/\1/p'); \
+	  test -n "$$rid"; \
+	  readyagents resume $$rid --approve gate
+	@rm -rf .readyagents-smoke
+
+ci: lint test smoke

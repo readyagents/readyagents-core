@@ -1,0 +1,38 @@
+name: multi_gate
+version: "1"
+description: >
+  Two sequential approval gates. Each pause waits for its own injected decision.
+  One shot: readyagents run examples/multi_gate.yaml --approve first --approve second
+  Pause:    readyagents run examples/multi_gate.yaml
+  Inject:   readyagents decide <run_id> --node first --decision approve
+            readyagents decide <run_id> --file decisions.json
+
+start: prep
+nodes:
+  - id: prep
+    type: transform
+    template: "payload"
+    output_key: body
+    next: first
+
+  - id: first
+    type: approval
+    prompt: "First gate for {{body}}?"
+    then: second
+    else: denied
+
+  - id: second
+    type: approval
+    prompt: "Second gate for {{body}}?"
+    then: ok
+    else: denied
+
+  - id: ok
+    type: transform
+    template: "multi_gate ok: {{body}}"
+    output_key: summary
+
+  - id: denied
+    type: transform
+    template: "multi_gate denied"
+    output_key: summary

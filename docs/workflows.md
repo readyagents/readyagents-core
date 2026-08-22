@@ -36,6 +36,12 @@ readyagents run hello.yaml --input name=Ada
 | `allow_http` | Enable builtin `http_get` |
 | `workspace` | Sandbox directory; must stay under `READYAGENTS_WORKSPACE` if set, else the workflow file's directory |
 | `default_model` | Override `READYAGENTS_DEFAULT_MODEL` for agent nodes |
+| `budget` | `{max_tokens, max_cost_usd}` — further LLM calls raise `BudgetExceeded` |
+| `fallback_models` | Model refs tried after the primary LLM fails |
+| `circuit` | `{failure_threshold, cooldown_seconds}` process-local breaker |
+| `on_pause_url` | Outbound webhook URL when an approval node pauses |
+| `cache_llm` | Opt in to the local LLM cache for this workflow |
+| `redact` | Opt in to PII redaction for this workflow |
 
 ## Node fields (all types)
 
@@ -63,6 +69,25 @@ If `next` and `edges` are omitted, the engine uses **list order** (the following
 ```
 
 Missing `{{variables}}` fail with `TemplateError`.
+
+Optional agent fields:
+
+| Field | Meaning |
+| --- | --- |
+| `fallback_models` | Extra `provider:model` refs if this node’s primary fails |
+| `output_schema` | JSON Schema object; the LLM payload is parsed and validated with Pydantic (`StructuredOutputError` on mismatch) |
+| `cache` | `true` / `false` to override workflow/settings LLM cache for this node |
+
+```yaml
+- id: classify
+  type: agent
+  prompt: Return JSON for {{message}}
+  output_schema:
+    type: object
+    required: [priority]
+    properties:
+      priority: {type: string}
+```
 
 ## Tool
 
@@ -116,7 +141,7 @@ readyagents resume <run_id> --approve gate
 
 `then` is the approve path; `else` is the reject path. `next` is used when approved if `then` is omitted.
 
-Multiple gates in one graph are allowed. Each needs its own `--approve NODE` (or `--reject`).
+Multiple gates in one graph are allowed. Each needs its own `--approve NODE` (or `--reject`), or an injected JSON decision (`readyagents decide` / `--decision-file`). See `examples/multi_gate.yaml`.
 
 ## Parallel
 
@@ -204,6 +229,7 @@ readyagents runs replay <run_id>
 | --- | --- | --- |
 | `examples/calc_pipeline.yaml` | No | Clone-and-run smoke test |
 | `examples/approval_gate.yaml` | No | Human-in-the-loop approval |
+| `examples/multi_gate.yaml` | No | Two sequential approval gates |
 | `examples/fanout_gate.yaml` | No | Parallel fan-out + approval |
 | `examples/include_demo.yaml` | No | Sub-workflow `include` |
 | `examples/composed_gate.yaml` | No | Include + parallel + approval |

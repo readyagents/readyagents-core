@@ -77,6 +77,7 @@ readyagents run examples/approval_gate.yaml
 readyagents resume <run_id> --approve gate
 readyagents run examples/fanout_gate.yaml --approve gate
 readyagents run examples/include_demo.yaml
+readyagents run examples/multi_gate.yaml --approve first --approve second
 ```
 
 ## LLM examples

@@ -10,15 +10,31 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from readyagents.audit import audit_dir_for, make_auditor
 from readyagents.config import Settings, get_settings
 from readyagents.errors import ConfigError, WorkflowError
 from readyagents.llm.base import LLMProvider
-from readyagents.packs.loader import collect_pack_nodes, collect_pack_tools, discover_packs
+from readyagents.llm.cache import LLMCache
+from readyagents.llm.resilience import CircuitBreaker, usd_to_micros
+from readyagents.logging import configure_logging, get_logger
+from readyagents.notify import post_json
+from readyagents.packs.loader import (
+    collect_pack_authorizers,
+    collect_pack_nodes,
+    collect_pack_secrets,
+    collect_pack_tools,
+    discover_packs,
+)
+from readyagents.policy import redactor_from_settings, resolve_authorizer
 from readyagents.tools import ToolRegistry, default_registry
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
 from readyagents.workflow.schema import WorkflowSpec, validate_required_inputs
-from readyagents.workflow.state import RunState, load_run, persist_run
+from readyagents.workflow.state import RunState, load_decision_file, load_run, persist_run
+
+log = get_logger("runner")
+
+_APPROVE = {"approve", "approved", "yes", "true", "accept", "ok"}
 
 
 def load_workflow(path: Path | str) -> WorkflowSpec:
@@ -86,9 +102,22 @@ def run_workflow_file(
     extra_tools: ToolRegistry | None = None,
     decisions: Mapping[str, str] | None = None,
     resume_state: RunState | None = None,
+    actor: str | None = None,
+    authorizer: Any | None = None,
+    secrets: Any | None = None,
+    decision_file: Path | str | None = None,
+    on_pause: Any | None = None,
+    no_cache: bool = False,
 ) -> RunState:
     settings = settings or get_settings()
     workflow = load_workflow(path)
+    merged_decisions: dict[str, str] = {}
+    if decision_file:
+        merged_decisions.update(load_decision_file(decision_file))
+    if decisions:
+        merged_decisions.update(
+            {str(k): str(v).strip().lower() for k, v in dict(decisions).items()}
+        )
     if resume_state is not None:
         merged = dict(resume_state.inputs)
         if inputs:
@@ -113,6 +142,32 @@ def run_workflow_file(
     if extra_tools:
         tools.merge(extra_tools)
 
+    pack_secrets = list(collect_pack_secrets(packs))
+    if secrets is not None:
+        from readyagents.secrets import as_backends
+
+        pack_secrets = as_backends(secrets) + pack_secrets
+    pack_authorizers = list(collect_pack_authorizers(packs))
+    if authorizer is not None:
+        pack_authorizers = [authorizer, *pack_authorizers]
+    resolved_authorizer = resolve_authorizer(pack_authorizers)
+    resolved_actor = actor if actor is not None else settings.actor
+    action = "resume" if resume_state is not None else "run"
+    resource = resume_state.run_id if resume_state is not None else workflow.name
+    resolved_authorizer.check(resolved_actor, action, resource)
+    for node_id, decision in merged_decisions.items():
+        gate = "approve" if str(decision).strip().lower() in _APPROVE else "reject"
+        resolved_authorizer.check(resolved_actor, gate, node_id)
+
+    redact_on = bool(settings.redact if workflow.redact is None else workflow.redact)
+    redactor = redactor_from_settings(
+        enabled=redact_on,
+        patterns=settings.redact_pattern_list(),
+        literals=settings.redact_literal_list(),
+    )
+    if redactor is not None:
+        configure_logging(settings.log_level, fmt=settings.log_format, redactor=redactor)
+
     mcp = None
     if workflow.mcp_servers and not dry_run:
         from readyagents.mcp.client import MCPClient
@@ -121,9 +176,57 @@ def run_workflow_file(
         tools.merge(mcp.tools())
 
     runs_dir = settings.runs_dir()
+    auditor = None
+    if persist:
+        auditor = make_auditor(audit_dir_for(settings.home_path()), redactor=redactor)
 
     def _save(state: RunState) -> None:
-        persist_run(state, runs_dir)
+        persist_run(state, runs_dir, redactor=redactor)
+
+    budget = workflow.budget
+    if budget and budget.max_tokens is not None:
+        budget_tokens = budget.max_tokens
+    else:
+        budget_tokens = settings.max_tokens
+    budget_cost = (
+        usd_to_micros(budget.max_cost_usd)
+        if budget and budget.max_cost_usd is not None
+        else usd_to_micros(settings.max_cost_usd)
+    )
+    circuit_spec = workflow.circuit
+    breaker = CircuitBreaker(
+        failure_threshold=(
+            circuit_spec.failure_threshold if circuit_spec else settings.circuit_failure_threshold
+        ),
+        cooldown_seconds=(
+            circuit_spec.cooldown_seconds if circuit_spec else settings.circuit_cooldown_seconds
+        ),
+    )
+    cache_enabled = bool(settings.llm_cache if workflow.cache_llm is None else workflow.cache_llm)
+    if no_cache:
+        cache_enabled = False
+    llm_cache = LLMCache(settings.cache_dir()) if cache_enabled else None
+    fallback = list(workflow.fallback_models or []) + settings.fallback_model_list()
+    pause_url = workflow.on_pause_url or settings.pause_notify_url
+
+    def _pause(exc: Any, state: RunState) -> None:
+        if on_pause is not None:
+            on_pause(exc, state)
+        if pause_url:
+            payload = {
+                "event": "approval_required",
+                "run_id": state.run_id,
+                "node_id": getattr(exc, "node_id", state.pending_node),
+                "prompt": getattr(exc, "prompt", ""),
+                "resume": (
+                    f"readyagents resume {state.run_id} "
+                    f"--approve {getattr(exc, 'node_id', state.pending_node)}"
+                ),
+            }
+            try:
+                post_json(pause_url, payload)
+            except Exception as notify_exc:  # noqa: BLE001
+                log.warning("pause webhook failed: %s", notify_exc)
 
     ctx = ExecutionContext(
         workflow,
@@ -132,15 +235,29 @@ def run_workflow_file(
         llm=llm,
         default_model=workflow.default_model or settings.default_model,
         extra_handlers=collect_pack_nodes(packs),
-        decisions=decisions,
+        decisions=merged_decisions,
         on_persist=_save if persist else None,
         workflow_dir=source_path.parent,
+        circuit_breaker=breaker,
+        llm_cache=llm_cache,
+        budget_tokens=budget_tokens,
+        budget_cost_micros=budget_cost,
+        secrets=pack_secrets or None,
+        authorizer=resolved_authorizer,
+        actor=resolved_actor,
+        redactor=redactor,
+        auditor=auditor,
+        on_pause=_pause if (on_pause is not None or pause_url) else None,
+        fallback_models=fallback,
+        cache_llm=cache_enabled,
+        usage_state=resume_state,
     )
     metadata = {
         "source": str(source_path),
         "allow_http": allow_http,
         "dry_run": dry_run,
         "workspace": str(workspace),
+        "actor": resolved_actor,
     }
     try:
         state = run_workflow(
@@ -167,14 +284,18 @@ def resume_run(
     extra_tools: ToolRegistry | None = None,
     decisions: Mapping[str, str] | None = None,
     llm: LLMProvider | None = None,
+    actor: str | None = None,
+    authorizer: Any | None = None,
+    secrets: Any | None = None,
+    decision_file: Path | str | None = None,
+    on_pause: Any | None = None,
+    no_cache: bool = False,
 ) -> RunState:
     settings = settings or get_settings()
     state = load_run(settings.runs_dir(), run_id)
     source = path or state.metadata.get("source")
     if not source:
-        raise ConfigError(
-            f"Run {state.run_id} has no stored workflow path. Pass --workflow PATH."
-        )
+        raise ConfigError(f"Run {state.run_id} has no stored workflow path. Pass --workflow PATH.")
     return run_workflow_file(
         source,
         inputs=inputs,
@@ -185,6 +306,12 @@ def resume_run(
         extra_tools=extra_tools,
         decisions=decisions,
         resume_state=state,
+        actor=actor,
+        authorizer=authorizer,
+        secrets=secrets,
+        decision_file=decision_file,
+        on_pause=on_pause,
+        no_cache=no_cache,
     )
 
 
@@ -197,15 +324,18 @@ def replay_run(
     extra_tools: ToolRegistry | None = None,
     decisions: Mapping[str, str] | None = None,
     llm: LLMProvider | None = None,
+    actor: str | None = None,
+    authorizer: Any | None = None,
+    secrets: Any | None = None,
+    decision_file: Path | str | None = None,
+    no_cache: bool = False,
 ) -> RunState:
     """Start a new run with the stored workflow path and inputs."""
     settings = settings or get_settings()
     previous = load_run(settings.runs_dir(), run_id)
     source = previous.metadata.get("source")
     if not source:
-        raise ConfigError(
-            f"Run {previous.run_id} has no stored workflow path. Cannot replay."
-        )
+        raise ConfigError(f"Run {previous.run_id} has no stored workflow path. Cannot replay.")
     return run_workflow_file(
         source,
         inputs=previous.inputs,
@@ -215,4 +345,9 @@ def replay_run(
         persist=persist,
         extra_tools=extra_tools,
         decisions=decisions,
+        actor=actor,
+        authorizer=authorizer,
+        secrets=secrets,
+        decision_file=decision_file,
+        no_cache=no_cache,
     )

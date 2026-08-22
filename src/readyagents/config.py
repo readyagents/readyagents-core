@@ -76,6 +76,75 @@ class Settings(BaseSettings):
         default="INFO",
         validation_alias=AliasChoices("READYAGENTS_LOG_LEVEL"),
     )
+    log_format: str = Field(
+        default="text",
+        validation_alias=AliasChoices("READYAGENTS_LOG_FORMAT"),
+    )
+    max_tokens: int | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_MAX_TOKENS"),
+    )
+    max_cost_usd: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_MAX_COST_USD"),
+    )
+    fallback_models: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_FALLBACK_MODELS"),
+    )
+    circuit_failure_threshold: int = Field(
+        default=3,
+        validation_alias=AliasChoices("READYAGENTS_CIRCUIT_FAILURE_THRESHOLD"),
+    )
+    circuit_cooldown_seconds: float = Field(
+        default=60.0,
+        validation_alias=AliasChoices("READYAGENTS_CIRCUIT_COOLDOWN_SECONDS"),
+    )
+    llm_cache: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("READYAGENTS_LLM_CACHE"),
+    )
+    redact: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("READYAGENTS_REDACT"),
+    )
+    redact_literals: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_REDACT_LITERALS"),
+    )
+    redact_patterns: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_REDACT_PATTERNS"),
+    )
+    actor: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_ACTOR"),
+    )
+    pause_notify_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("READYAGENTS_PAUSE_NOTIFY_URL"),
+    )
+
+    def fallback_model_list(self) -> list[str]:
+        if not self.fallback_models:
+            return []
+        return [part.strip() for part in self.fallback_models.split(",") if part.strip()]
+
+    def redact_literal_list(self) -> list[str]:
+        if not self.redact_literals:
+            return []
+        return [part.strip() for part in self.redact_literals.split(",") if part.strip()]
+
+    def redact_pattern_list(self) -> list[str]:
+        if not self.redact_patterns:
+            return []
+        return [part.strip() for part in self.redact_patterns.split(",") if part.strip()]
+
+    def cache_dir(self) -> Path:
+        return self.home_path() / "cache"
+
+    def audit_dir(self) -> Path:
+        return self.home_path() / "audit"
 
     @field_validator("openai_api_key", "anthropic_api_key", "openai_compat_api_key", mode="before")
     @classmethod
@@ -127,18 +196,24 @@ def clear_settings_cache() -> None:
     get_settings.cache_clear()
 
 
-def require_api_key(provider: str, settings: Settings | None = None) -> str:
+def require_api_key(
+    provider: str,
+    settings: Settings | None = None,
+    *,
+    secrets: Any = None,
+) -> str:
     settings = settings or get_settings()
     key = settings.api_key_for(provider)
+    if not key and secrets is not None:
+        from readyagents.secrets import secret_for_provider
+
+        key = secret_for_provider(provider, settings=None, secrets=secrets)
     if key:
         return key
     hints = {
-        "openai": (
-            "Set OPENAI_API_KEY or READYAGENTS_OPENAI_API_KEY (copy .env.example to .env)."
-        ),
+        "openai": ("Set OPENAI_API_KEY or READYAGENTS_OPENAI_API_KEY (copy .env.example to .env)."),
         "anthropic": (
-            "Set ANTHROPIC_API_KEY or READYAGENTS_ANTHROPIC_API_KEY "
-            "(copy .env.example to .env)."
+            "Set ANTHROPIC_API_KEY or READYAGENTS_ANTHROPIC_API_KEY (copy .env.example to .env)."
         ),
         "openai-compat": (
             "Set OPENAI_COMPAT_API_KEY (and OPENAI_COMPAT_BASE_URL) "
@@ -146,7 +221,4 @@ def require_api_key(provider: str, settings: Settings | None = None) -> str:
         ),
     }
     hint = hints.get(provider.lower(), f"Set an API key for provider '{provider}'.")
-    raise LLMError(
-        f"No API key configured for provider '{provider}'. "
-        f"ReadyAgents is BYOK — {hint}"
-    )
+    raise LLMError(f"No API key configured for provider '{provider}'. ReadyAgents is BYOK — {hint}")

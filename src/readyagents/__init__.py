@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from readyagents.errors import (
     ApprovalRequired,
+    AuthorizationError,
+    BudgetExceeded,
+    CircuitOpen,
     ConfigError,
     LLMError,
     MCPError,
     NodeError,
     ReadyAgentsError,
+    StructuredOutputError,
     TemplateError,
     ToolError,
     WorkflowError,
@@ -19,11 +23,15 @@ from readyagents.errors import (
 __all__ = [
     "__version__",
     "ApprovalRequired",
+    "AuthorizationError",
+    "BudgetExceeded",
+    "CircuitOpen",
     "ConfigError",
     "LLMError",
     "MCPError",
     "NodeError",
     "ReadyAgentsError",
+    "StructuredOutputError",
     "TemplateError",
     "ToolError",
     "WorkflowError",

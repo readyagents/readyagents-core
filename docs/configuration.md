@@ -50,8 +50,22 @@ If the node has no explicit `model:` and the default provider has no key, the en
 | `READYAGENTS_WORKSPACE` | Optional sandbox root for `read_file` / `write_file`. If unset, file tools use the workflow file's directory. |
 | `READYAGENTS_HOME` | Artifact directory (default: `.readyagents`). Run JSON lives in `$READYAGENTS_HOME/runs/` |
 | `READYAGENTS_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. Log lines include `run=` and `node=` |
+| `READYAGENTS_LOG_FORMAT` | `text` (default) or `json` |
+| `READYAGENTS_MAX_TOKENS` | Stop further LLM calls when run `total_tokens` reaches this |
+| `READYAGENTS_MAX_COST_USD` | Same for estimated USD (`cost_micros` on the run) |
+| `READYAGENTS_FALLBACK_MODELS` | Comma-separated `provider:model` list tried after the primary fails |
+| `READYAGENTS_CIRCUIT_FAILURE_THRESHOLD` | Consecutive failures before skipping a model (default 3) |
+| `READYAGENTS_CIRCUIT_COOLDOWN_SECONDS` | How long a skipped model stays skipped (default 60) |
+| `READYAGENTS_LLM_CACHE` | `1` / `true` enables the local completion cache under `$READYAGENTS_HOME/cache/` |
+| `READYAGENTS_REDACT` | `1` / `true` masks emails, `sk-…` keys, and configured literals in logs and persisted records |
+| `READYAGENTS_REDACT_LITERALS` | Comma-separated extra strings to mask |
+| `READYAGENTS_REDACT_PATTERNS` | Comma-separated extra regexes to mask |
+| `READYAGENTS_ACTOR` | Default actor id for RBAC hooks |
+| `READYAGENTS_PAUSE_NOTIFY_URL` | Outbound POST when an approval node pauses (core does not listen) |
 
-Inspect and resume those records with `readyagents runs list`, `readyagents runs show`, and `readyagents resume`.
+Inspect and resume those records with `readyagents runs list`, `readyagents runs show`, and `readyagents resume`. Audit events (append-only JSONL) live in `$READYAGENTS_HOME/audit/`.
+
+Secrets backends and authorizers are pack hooks. Env / `.env` remains the default BYOK path; core does not vendor Vault or AWS SDKs.
 
 Workflow YAML may also set `allow_http: true` and `workspace:`. Either the env flag or the workflow flag enables HTTP. `workspace:` must resolve under `READYAGENTS_WORKSPACE` when that env is set, otherwise under the workflow file's directory. It cannot point at `/` or a parent directory.
 

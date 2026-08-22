@@ -25,5 +25,5 @@ jobs:
         run: ruff check src tests
       - name: Pytest
         run: python -m pytest
-      - name: Smoke example
-        run: readyagents run examples/calc_pipeline.yaml --no-persist
+      - name: Keyless examples (dry-run, resume, approval, parallel, include)
+        run: make smoke

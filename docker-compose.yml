@@ -1,0 +1,11 @@
+# Run the real readyagents CLI against a mounted workflow. No extra services.
+services:
+  readyagents:
+    build: .
+    image: readyagents-core:local
+    working_dir: /work
+    volumes:
+      - .:/work
+    environment:
+      READYAGENTS_HOME: /work/.readyagents
+    command: ["run", "examples/calc_pipeline.yaml"]

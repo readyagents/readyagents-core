@@ -27,6 +27,7 @@ from readyagents.workflow.state import (
     RunState,
     build_decisions,
     list_runs,
+    load_decision_file,
     load_run,
     parse_input_pairs,
 )
@@ -72,8 +73,14 @@ def _root(
         help="DEBUG, INFO, WARNING, or ERROR.",
         envvar="READYAGENTS_LOG_LEVEL",
     ),
+    log_format: str = typer.Option(
+        "text",
+        "--log-format",
+        help="text or json (machine-parseable events with run/node).",
+        envvar="READYAGENTS_LOG_FORMAT",
+    ),
 ) -> None:
-    configure_logging(log_level)
+    configure_logging(log_level, fmt=log_format)
 
 
 @app.command()
@@ -218,9 +225,7 @@ def run(
         "--dry-run",
         help="Walk the graph without calling an LLM, http_get, or write_file.",
     ),
-    no_persist: bool = typer.Option(
-        False, "--no-persist", help="Do not write a run record."
-    ),
+    no_persist: bool = typer.Option(False, "--no-persist", help="Do not write a run record."),
     approve: list[str] = typer.Option(
         [],
         "--approve",
@@ -246,10 +251,31 @@ def run(
         "--log-level",
         help="DEBUG, INFO, WARNING, or ERROR (same as the root flag).",
     ),
+    log_format: str | None = typer.Option(
+        None,
+        "--log-format",
+        help="text or json (same as the root flag).",
+    ),
+    decision_file: Path | None = typer.Option(
+        None,
+        "--decision-file",
+        help="JSON file injecting approval decisions (not only --approve flags).",
+    ),
+    actor: str | None = typer.Option(
+        None,
+        "--actor",
+        help="Actor id for RBAC hooks (env: READYAGENTS_ACTOR).",
+        envvar="READYAGENTS_ACTOR",
+    ),
+    no_cache: bool = typer.Option(
+        False,
+        "--no-cache",
+        help="Skip the local LLM response cache for this run.",
+    ),
 ) -> None:
     """Execute a workflow."""
-    if log_level:
-        configure_logging(log_level)
+    if log_level or log_format:
+        configure_logging(log_level or "INFO", **({"fmt": log_format} if log_format else {}))
     persist = not no_persist
     try:
         parsed = parse_input_pairs(inputs)
@@ -262,6 +288,9 @@ def run(
                 dry_run=dry_run,
                 persist=persist,
                 decisions=decisions,
+                decision_file=decision_file,
+                actor=actor,
+                no_cache=no_cache,
             )
         else:
             state = run_workflow_file(
@@ -270,6 +299,9 @@ def run(
                 dry_run=dry_run,
                 persist=persist,
                 decisions=decisions,
+                decision_file=decision_file,
+                actor=actor,
+                no_cache=no_cache,
             )
     except ReadyAgentsError as exc:
         _emit_run_exception(exc, as_json=as_json, persist=persist)
@@ -299,6 +331,17 @@ def resume_cmd(
         "--json",
         help="Print the run record as JSON on stdout (no tables).",
     ),
+    decision_file: Path | None = typer.Option(
+        None,
+        "--decision-file",
+        help="JSON file injecting approval decisions.",
+    ),
+    actor: str | None = typer.Option(
+        None,
+        "--actor",
+        envvar="READYAGENTS_ACTOR",
+    ),
+    no_cache: bool = typer.Option(False, "--no-cache"),
 ) -> None:
     """Resume a paused or failed run from the last successful node."""
     persist = not no_persist
@@ -311,6 +354,57 @@ def resume_cmd(
             dry_run=dry_run,
             persist=persist,
             decisions=build_decisions(approve, reject),
+            decision_file=decision_file,
+            actor=actor,
+            no_cache=no_cache,
+        )
+    except ReadyAgentsError as exc:
+        _emit_run_exception(exc, as_json=as_json, persist=persist)
+    _emit_run(state, as_json=as_json)
+
+
+@app.command("decide")
+def decide_cmd(
+    run_id: str = typer.Argument(..., help="Paused run id (or unique prefix)."),
+    decision_file: Path | None = typer.Option(
+        None,
+        "--file",
+        "--decision-file",
+        help='JSON payload: {"node": "approve"} or {"node_id", "decision"}.',
+    ),
+    node: str | None = typer.Option(None, "--node", help="Approval node id."),
+    decision: str | None = typer.Option(
+        None,
+        "--decision",
+        help="approve or reject (requires --node).",
+    ),
+    actor: str | None = typer.Option(None, "--actor", envvar="READYAGENTS_ACTOR"),
+    as_json: bool = typer.Option(False, "--json"),
+    no_persist: bool = typer.Option(False, "--no-persist"),
+) -> None:
+    """Inject an external approval decision into a paused run, then resume.
+
+    This is the core side of a webhook/pack: no always-on HTTP listener.
+    A pack can receive the webhook and call this (or write --file).
+    """
+    from readyagents.errors import ConfigError
+
+    persist = not no_persist
+    try:
+        decisions: dict[str, str] = {}
+        if decision_file is not None:
+            decisions.update(load_decision_file(decision_file))
+        if node:
+            if not decision:
+                raise ConfigError("--decision is required with --node")
+            decisions[node] = decision.strip().lower()
+        if not decisions:
+            raise ConfigError("Pass --file or --node plus --decision")
+        state = resume_run(
+            run_id,
+            persist=persist,
+            decisions=decisions,
+            actor=actor,
         )
     except ReadyAgentsError as exc:
         _emit_run_exception(exc, as_json=as_json, persist=persist)
@@ -457,6 +551,9 @@ def runs_replay(
         "--json",
         help="Print the run record as JSON on stdout (no tables).",
     ),
+    decision_file: Path | None = typer.Option(None, "--decision-file"),
+    actor: str | None = typer.Option(None, "--actor", envvar="READYAGENTS_ACTOR"),
+    no_cache: bool = typer.Option(False, "--no-cache"),
 ) -> None:
     """Start a new run using the stored workflow path and inputs."""
     persist = not no_persist
@@ -466,6 +563,9 @@ def runs_replay(
             dry_run=dry_run,
             persist=persist,
             decisions=build_decisions(approve, reject),
+            decision_file=decision_file,
+            actor=actor,
+            no_cache=no_cache,
         )
     except ReadyAgentsError as exc:
         _emit_run_exception(exc, as_json=as_json, persist=persist)
@@ -615,6 +715,9 @@ def _print_usage(state: RunState) -> None:
     if not state.usage:
         return
     parts = [f"{k}={v}" for k, v in state.usage.items()]
+    micros = state.usage.get("cost_micros")
+    if micros:
+        parts.append(f"cost_usd={micros / 1_000_000:.6f}")
     console.print("usage: " + " ".join(parts))
 
 
@@ -636,9 +739,7 @@ def _print_paused(exc: ApprovalRequired) -> None:
     err_console.print(f"[yellow]{type(exc).__name__}:[/yellow] {exc}")
     if exc.prompt:
         console.print(Panel(escape(exc.prompt), title=f"Approval: {exc.node_id}"))
-    console.print(
-        f"Resume: [cyan]readyagents resume {exc.run_id} --approve {exc.node_id}[/cyan]"
-    )
+    console.print(f"Resume: [cyan]readyagents resume {exc.run_id} --approve {exc.node_id}[/cyan]")
 
 
 def _preview(value: object, limit: int = 160) -> str:

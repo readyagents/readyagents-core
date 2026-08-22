@@ -7,7 +7,7 @@ We are not launching. We are listening.
 
 This is the free core of [ReadyAgents](https://github.com/readyagents). Commercial **packs** (always-on / continuous systems, hosted control plane) sit on top of this engine. They are not required to run workflows.
 
-Package `readyagents` **0.2.0**. Not on PyPI — install from this repo.
+Package `readyagents` **0.3.0**. Packaging is PyPI-ready (sdist + wheel); this repo is still the install source until a publish.
 
 ## What it does
 
@@ -19,6 +19,11 @@ Package `readyagents` **0.2.0**. Not on PyPI — install from this repo.
 - Builtin tools with **zero extra servers**: `now`, `calc`, `json_get`, `read_file`, `write_file`, optional `http_get`
 - Optional [MCP](https://modelcontextprotocol.io) client and server (`readyagents mcp serve`)
 - Extra node types and tools via Python entry points (`readyagents.packs`)
+- Per-node token/cost, budgets, model fallback, JSON logs
+- External approval injection (`readyagents decide`) and outbound pause notify
+- Secrets / RBAC / PII-redaction hooks and an append-only audit trail
+- Pydantic `output_schema` on agent nodes; opt-in local LLM cache
+- `readyagents.testing` helpers, recorded LLM mocks, and a tiny eval harness
 
 ## 60-second start
 
@@ -44,6 +49,7 @@ readyagents runs report <run_id>
 readyagents new my-flow
 readyagents run examples/approval_gate.yaml --approve gate
 readyagents run examples/composed_gate.yaml --approve gate
+readyagents run examples/multi_gate.yaml --approve first --approve second
 ```
 
 Human-in-the-loop without a decision **pauses** (exit 2, does not hang) and can be resumed:
@@ -54,6 +60,8 @@ readyagents runs list
 readyagents resume <run_id> --approve gate
 # or
 readyagents resume <run_id> --reject gate
+# or inject a JSON decision (no always-on webhook server in core):
+readyagents decide <run_id> --file decision.json
 ```
 
 With a key in `.env` (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`):
@@ -91,8 +99,9 @@ flowchart LR
 | `readyagents init` | Write `.env` from `.env.example` if missing |
 | `readyagents new [name] [--template basic\|approval\|research\|pipeline\|review]` | Scaffold workflow + README + `.env.example` |
 | `readyagents validate PATH` | Schema-validate a workflow |
-| `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE] [--reject NODE] [--log-level LEVEL]` | Execute |
-| `readyagents resume RUN_ID [--approve NODE] [--reject NODE]` | Resume a paused or failed run |
+| `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE] [--reject NODE] [--decision-file FILE] [--actor NAME]` | Execute |
+| `readyagents resume RUN_ID [--approve NODE] [--reject NODE] [--decision-file FILE]` | Resume a paused or failed run |
+| `readyagents decide RUN_ID [--file FILE \| --node ID --decision approve]` | Inject an external approval decision and resume |
 | `readyagents runs list` | List persisted runs |
 | `readyagents runs show RUN_ID` | Node timeline + stored state (`inspect` is an alias) |
 | `readyagents runs report RUN_ID` | Local HTML summary of a run |
@@ -107,6 +116,7 @@ flowchart LR
 | --- | --- |
 | `examples/calc_pipeline.yaml` | Builtin tools, transform, condition |
 | `examples/approval_gate.yaml` | Human-in-the-loop pause / resume |
+| `examples/multi_gate.yaml` | Two sequential approval gates |
 | `examples/fanout_gate.yaml` | Parallel branches + approval |
 | `examples/include_demo.yaml` | Sub-workflow `include` |
 | `examples/composed_gate.yaml` | Include + parallel + approval |
@@ -125,7 +135,7 @@ flowchart LR
 - [Packs](docs/packs.md)
 - [CLI](docs/cli.md)
 - [Changelog](CHANGELOG.md)
-- [Release notes 0.2.0](RELEASE_NOTES.md)
+- [Release notes 0.3.0](RELEASE_NOTES.md)
 
 ## Install extras (still from this checkout)
 
@@ -140,13 +150,18 @@ pip install -e ".[all]"
 
 Then `cp .env.example .env` and paste your own keys. Core workflows that only use builtin tools do **not** need extras, keys, or Node.js.
 
+```bash
+docker compose run --rm readyagents run examples/calc_pipeline.yaml
+make smoke
+```
+
 
 ## What is not in core
 
 These belong in **Premium Packs**, not this repository:
 
 - Always-on / continuous workers and schedulers
-- Hosted control plane, teams, SSO
+- Hosted control plane, SSO, multi-tenant teams (RBAC **hooks** only)
 - Distributed recovery and remote run stores
 - Alerting, paging, billing
 

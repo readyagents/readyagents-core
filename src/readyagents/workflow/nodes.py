@@ -13,19 +13,35 @@ from typing import Any
 
 from readyagents.errors import (
     ApprovalRequired,
+    AuthorizationError,
+    BudgetExceeded,
+    CircuitOpen,
+    LLMError,
     NodeError,
     ReadyAgentsError,
     TemplateError,
     ToolError,
     WorkflowError,
 )
-from readyagents.llm.base import LLMProvider, Message
+from readyagents.llm.base import CompletionResult, LLMProvider, Message
+from readyagents.llm.cache import LLMCache
 from readyagents.llm.registry import get_provider
-from readyagents.logging import get_logger
+from readyagents.llm.resilience import (
+    check_budget,
+    model_candidates,
+    model_id_for,
+    normalize_usage,
+    raise_exhausted,
+    usage_nonzero,
+)
+from readyagents.logging import get_logger, log_event
 from readyagents.tools import ToolRegistry
 from readyagents.workflow.schema import NodeSpec, NodeType, WorkflowSpec
 from readyagents.workflow.state import RunState
+from readyagents.workflow.structured import validate_structured_output
 from readyagents.workflow.templates import interpolate, interpolate_value, lookup, resolve_path
+
+log = get_logger("nodes")
 
 _COMPARE = re.compile(
     r"^\s*(.+?)\s*(==|!=|>=|<=|>|<|contains|startswith|endswith)\s*(.+?)\s*$",
@@ -39,8 +55,6 @@ _MAX_INCLUDE_DEPTH = 8
 _MAX_PARALLEL = 8
 # Dry-run still walks the graph; these tools must not hit the network or disk.
 _DRY_RUN_STUB_TOOLS = frozenset({"http_get", "write_file"})
-
-log = get_logger("nodes")
 
 
 class ExecutionContext:
@@ -57,6 +71,19 @@ class ExecutionContext:
         on_persist: Callable[[RunState], None] | None = None,
         workflow_dir: Path | None = None,
         include_depth: int = 0,
+        circuit_breaker: Any | None = None,
+        llm_cache: LLMCache | None = None,
+        budget_tokens: int | None = None,
+        budget_cost_micros: int | None = None,
+        secrets: Any | None = None,
+        authorizer: Any | None = None,
+        actor: str | None = None,
+        redactor: Any | None = None,
+        auditor: Callable[..., None] | None = None,
+        on_pause: Callable[..., None] | None = None,
+        fallback_models: list[str] | None = None,
+        cache_llm: bool = False,
+        usage_state: RunState | None = None,
     ) -> None:
         self.workflow = workflow
         self.tools = tools
@@ -68,10 +95,57 @@ class ExecutionContext:
         self.on_persist = on_persist
         self.workflow_dir = Path(workflow_dir) if workflow_dir else Path.cwd()
         self.include_depth = include_depth
+        self.circuit_breaker = circuit_breaker
+        self.llm_cache = llm_cache
+        self.budget_tokens = budget_tokens
+        self.budget_cost_micros = budget_cost_micros
+        self.secrets = secrets
+        self.authorizer = authorizer
+        self.actor = actor
+        self.redactor = redactor
+        self.auditor = auditor
+        self.on_pause = on_pause
+        self.fallback_models = list(fallback_models or [])
+        self.cache_llm = cache_llm
+        self.usage_state = usage_state
 
     def decision_for(self, node_id: str) -> str | None:
         value = self.decisions.get(node_id)
         return value if value else None
+
+    def child(
+        self,
+        workflow: WorkflowSpec,
+        *,
+        workflow_dir: Path,
+        include_depth: int,
+        on_persist: Callable[[RunState], None] | None = None,
+    ) -> ExecutionContext:
+        return ExecutionContext(
+            workflow,
+            self.tools,
+            dry_run=self.dry_run,
+            llm=self.llm,
+            default_model=self.default_model or workflow.default_model,
+            extra_handlers=self.extra_handlers,
+            decisions=self.decisions,
+            on_persist=on_persist,
+            workflow_dir=workflow_dir,
+            include_depth=include_depth,
+            circuit_breaker=self.circuit_breaker,
+            llm_cache=self.llm_cache,
+            budget_tokens=self.budget_tokens,
+            budget_cost_micros=self.budget_cost_micros,
+            secrets=self.secrets,
+            authorizer=self.authorizer,
+            actor=self.actor,
+            redactor=self.redactor,
+            auditor=self.auditor,
+            on_pause=self.on_pause,
+            fallback_models=self.fallback_models,
+            cache_llm=self.cache_llm,
+            usage_state=self.usage_state,
+        )
 
 
 def execute_node(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
@@ -101,32 +175,132 @@ def execute_node(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     )
 
 
-def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> str:
+def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     ns = state.mapping()
     prompt = interpolate(node.prompt or "", ns)
     system = interpolate(node.system, ns) if node.system else None
     if ctx.dry_run:
         preview = prompt if not system else f"[system]\n{system}\n[user]\n{prompt}"
         estimated = _estimate_tokens(prompt, system or "")
-        state.add_usage(estimated_tokens=estimated)
+        _account_usage(state, ctx, {"estimated_tokens": estimated})
         return f"[dry-run]\n{preview}\n[estimated_tokens={estimated}]"
-    explicit = bool(node.model)
-    model_ref = node.model or ctx.default_model
-    if ctx.llm is not None:
-        provider = ctx.llm
-        model_id = (model_ref or "mock").split(":", 1)[-1]
-        if model_ref and ":" in model_ref:
-            model_id = model_ref.split(":", 1)[1]
-    else:
-        provider, model_id = get_provider(model_ref, implicit=not explicit)
     messages: list[Message] = []
     if system:
         messages.append(Message(role="system", content=system))
     messages.append(Message(role="user", content=prompt))
-    result = provider.complete(messages, model=model_id)
-    if result.usage:
-        state.add_usage(**result.usage)
+    result = _complete_agent(node, state, ctx, messages)
+    if node.output_schema:
+        return validate_structured_output(result.text, node.output_schema, node_id=node.id)
     return result.text
+
+
+def _account_usage(state: RunState, ctx: ExecutionContext, usage: Mapping[str, Any]) -> None:
+    cleaned = {str(k): v for k, v in dict(usage).items()}
+    state.note_node_usage(cleaned, rollup=True)
+    sink = ctx.usage_state
+    if sink is not None and sink is not state:
+        sink.add_usage(**cleaned)
+
+
+def _complete_agent(
+    node: NodeSpec,
+    state: RunState,
+    ctx: ExecutionContext,
+    messages: list[Message],
+) -> CompletionResult:
+    explicit = bool(node.model)
+    primary = node.model or ctx.default_model
+    candidates = model_candidates(primary, node.fallback_models, ctx.fallback_models)
+    if not candidates:
+        candidates = [primary or "mock"]
+    use_cache = bool(ctx.cache_llm if node.cache is None else node.cache)
+    last_error: BaseException | None = None
+    skipped: list[str] = []
+    tried: list[str] = []
+    for ref in candidates:
+        breaker = ctx.circuit_breaker
+        if breaker is not None and not breaker.allow(ref):
+            log_event(
+                log,
+                "circuit_open",
+                "circuit open, skip %s",
+                ref,
+                run_id=state.run_id,
+                node_id=node.id,
+                model=ref,
+            )
+            skipped.append(ref)
+            continue
+        cache_hit = None
+        if use_cache and ctx.llm_cache is not None:
+            cache_key = ctx.llm_cache.key(ref, messages)
+            cache_hit = ctx.llm_cache.get(cache_key)
+            if cache_hit is not None:
+                _account_usage(state, ctx, {"cache_hits": 1})
+                log_event(
+                    log,
+                    "cache_hit",
+                    "llm cache hit model=%s",
+                    ref,
+                    run_id=state.run_id,
+                    node_id=node.id,
+                    model=ref,
+                )
+                return cache_hit
+        check_budget(
+            (ctx.usage_state or state).usage,
+            max_tokens=ctx.budget_tokens,
+            max_cost_micros=ctx.budget_cost_micros,
+        )
+        try:
+            if ctx.llm is not None:
+                provider = ctx.llm
+                model_id = model_id_for(ref)
+            else:
+                provider, model_id = get_provider(
+                    ref,
+                    implicit=not explicit,
+                    secrets=ctx.secrets,
+                )
+            tried.append(ref)
+            result = provider.complete(messages, model=model_id)
+        except LLMError as exc:
+            last_error = exc
+            if breaker is not None:
+                breaker.record_failure(ref)
+            log_event(
+                log,
+                "llm_error",
+                "model %s failed: %s",
+                ref,
+                exc,
+                run_id=state.run_id,
+                node_id=node.id,
+                model=ref,
+            )
+            continue
+        if breaker is not None:
+            breaker.record_success(ref)
+        usage = normalize_usage(result.usage, model=result.model or model_id_for(ref))
+        if usage_nonzero(usage):
+            _account_usage(state, ctx, usage)
+        if use_cache and ctx.llm_cache is not None:
+            ctx.llm_cache.put(ctx.llm_cache.key(ref, messages), result)
+        if tried and tried[0] != ref:
+            log_event(
+                log,
+                "llm_fallback",
+                "fell back to %s",
+                ref,
+                run_id=state.run_id,
+                node_id=node.id,
+                model=ref,
+            )
+        return result
+    if skipped and not tried:
+        raise CircuitOpen(skipped[0])
+    raise_exhausted(tried, skipped, last_error)
+    raise LLMError("No LLM model was available")  # pragma: no cover
 
 
 def _run_tool(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
@@ -208,15 +382,27 @@ def _run_approval(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dic
             node.id,
             f"unknown decision '{raw}' (use approve or reject)",
         )
+    action = "approve" if approved else "reject"
+    if ctx.authorizer is not None:
+        ctx.authorizer.check(ctx.actor, action, node.id)
+    if ctx.auditor is not None:
+        ctx.auditor(
+            "decision",
+            run_id=state.run_id,
+            node_id=node.id,
+            decision=action,
+            actor=ctx.actor,
+        )
     if approved:
         nxt = node.then or node.next
     else:
         nxt = node.else_
     return {
         "approved": approved,
-        "decision": "approve" if approved else "reject",
+        "decision": action,
         "prompt": prompt,
         "next": nxt,
+        "actor": ctx.actor,
     }
 
 
@@ -239,6 +425,8 @@ def execute_node_with_policy(
         try:
             return _call_with_timeout(node, state, ctx), attempt
         except ApprovalRequired:
+            raise
+        except (BudgetExceeded, AuthorizationError, CircuitOpen):
             raise
         except ReadyAgentsError as exc:
             last_error = exc
@@ -327,6 +515,8 @@ def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dic
             branch_id, output = fut.result()
             collected[branch_id] = output
     ordered = {branch.id: collected[branch.id] for branch in branches}
+    # Branch execute_node calls accumulate on state._last_node_usage (thread-safe).
+    # The engine's take_node_usage then stores the merged total on this node.
     return ordered
 
 
@@ -356,17 +546,11 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     if not isinstance(nested_in, dict):
         raise NodeError(node.id, "include inputs must be a mapping")
     merged = merge_inputs(spec, nested_in)
-    nested_ctx = ExecutionContext(
+    nested_ctx = ctx.child(
         spec,
-        ctx.tools,
-        dry_run=ctx.dry_run,
-        llm=ctx.llm,
-        default_model=ctx.default_model,
-        extra_handlers=ctx.extra_handlers,
-        decisions=ctx.decisions,
-        on_persist=None,
         workflow_dir=candidate.parent,
         include_depth=ctx.include_depth + 1,
+        on_persist=None,
     )
     try:
         nested = run_workflow(
@@ -393,7 +577,10 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         )
     if nested.status != "succeeded":
         raise NodeError(node.id, f"included workflow '{spec.name}' {nested.status}")
-    state.add_usage(**nested.usage)
+    # Nested agents already add_usage onto ctx.usage_state (the parent run).
+    # Record nested totals on this include node without rolling them up again.
+    already_on_parent = ctx.usage_state is state
+    state.note_node_usage(nested.usage, rollup=not already_on_parent)
     return nested.output_keys or nested.node_outputs
 
 
