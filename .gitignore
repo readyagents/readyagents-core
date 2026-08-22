@@ -33,6 +33,9 @@ htmlcov/
 .readyagents/
 .readyagents-smoke/
 
+# Temporary agent notes / task dumps
+.tmp/
+
 # OS / editor / agent tooling
 .DS_Store
 Thumbs.db
