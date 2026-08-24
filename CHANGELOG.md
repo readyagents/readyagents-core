@@ -4,12 +4,6 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
-- File tools sandbox to the workflow file directory (not process cwd)
-- `packs --json` and `runs show --json` print a JSON envelope on missing / failed ids
-- Parallel branches honor `timeout_seconds` and `retry`
-- `http_get` connects only to IPs already classified public (DNS rebind)
-- Builtin `calc` / `json_get` / `read_file` / `write_file` reject oversized inputs
-
 ## 0.3.0 — 2026-08-22
 
 ### Added
