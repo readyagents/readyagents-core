@@ -82,13 +82,13 @@ is unchanged.
 - `runs list` prints each run twice (line + table) — shipped this pass
 - `--log-level` on `run` as docs claim (today it is root-only) — shipped this pass
 - MCP client must not shadow sandbox builtins or inherit API keys — shipped this pass
-- Size caps for `read_file` / `write_file` / `json_get` / `calc`
-- Pin `http_get` to IPs already classified public (DNS rebinding)
-- Docs extras still look like PyPI (`pip install "readyagents[openai]"`)
-- Makefile / CONTRIBUTING / CI: `composed_gate`, `ruff format --check`
+- Size caps for `read_file` / `write_file` / `json_get` / `calc` — shipped
+- Pin `http_get` to IPs already classified public (DNS rebinding) — shipped
+- Docs extras still look like PyPI (`pip install "readyagents[openai]"`) — shipped
+- Makefile / CONTRIBUTING: `composed_gate`, `ruff format --check` — shipped (`ci.yml` untouched)
 - `readyagents new` overwrite-refusal test — shipped this pass
-- `packs --json`; `runs show --json` envelope for missing ids
-- Parallel branches honoring `timeout_seconds` / `retry`
+- `packs --json`; `runs show --json` envelope for missing ids — shipped
+- Parallel branches honoring `timeout_seconds` / `retry` — shipped
 
 ## Merge note
 
