@@ -7,7 +7,7 @@ We are not launching. We are listening.
 
 This is the free core of [ReadyAgents](https://github.com/readyagents). Commercial **packs** (always-on / continuous systems, hosted control plane) sit on top of this engine. They are not required to run workflows.
 
-Package `readyagents` **0.3.0**. Packaging is PyPI-ready (sdist + wheel); this repo is still the install source until a publish.
+Package `readyagents` **0.4.0**. Packaging is PyPI-ready (sdist + wheel); this repo is still the install source until a publish.
 
 ## What it does
 
@@ -135,7 +135,7 @@ flowchart LR
 - [Packs](docs/packs.md)
 - [CLI](docs/cli.md)
 - [Changelog](CHANGELOG.md)
-- [Release notes 0.3.0](RELEASE_NOTES.md)
+- [Release notes 0.4.0](RELEASE_NOTES.md)
 
 ## Install extras (still from this checkout)
 
