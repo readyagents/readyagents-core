@@ -4,6 +4,14 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+## 0.4.0 — 2026-08-26
+
+### Docs
+
+- Empty Unreleased of items already shipped in 0.3.0 (#24)
+- `docs/first-ten-minutes.md` uses `readyagents new my-flow` (default pipeline), not `--template pipeline` (#25)
+- `NEXT.md` leftover marks extras, size caps, DNS rebind, parallel timeout/retry, packs JSON, and Makefile/CONTRIBUTING smoke as shipped (#26)
+
 ## 0.3.0 — 2026-08-22
 
 ### Added
