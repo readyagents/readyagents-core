@@ -46,10 +46,9 @@ def test_readme_keyless_smoke(tmp_path: Path, monkeypatch) -> None:
     assert run_id in html.read_text(encoding="utf-8")
 
     dest = tmp_path / "my-flow"
-    created = runner.invoke(
-        app, ["new", "my-flow", "--dest", str(dest), "--template", "pipeline"]
-    )
+    created = runner.invoke(app, ["new", "my-flow", "--dest", str(dest)])
     assert created.exit_code == 0, created.stdout + created.stderr
+    assert "template=pipeline" in created.stdout
     assert (dest / "workflow.yaml").is_file()
     assert (dest / "README.md").is_file()
     assert (dest / ".env.example").is_file()
