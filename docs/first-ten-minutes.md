@@ -37,7 +37,7 @@ readyagents decide <run_id> --node gate --decision approve
 ## 3. Start your own file
 
 ```bash
-readyagents new my-flow --template pipeline
+readyagents new my-flow
 readyagents run my-flow/workflow.yaml
 ```
 
