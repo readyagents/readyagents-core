@@ -6,8 +6,11 @@ import pytest
 
 from readyagents.errors import ToolError
 from readyagents.mcp.builtin import (
+    _MAX_JSON_BYTES,
     tool_calc,
     tool_json_get,
+    tool_json_merge,
+    tool_json_set,
     tool_now,
     tool_read_file,
     tool_write_file,
@@ -41,6 +44,31 @@ def test_json_get_dotted() -> None:
     assert tool_json_get({"x": 1}, "x") == 1
     with pytest.raises(ToolError):
         tool_json_get({"x": 1}, "nope")
+
+
+def test_json_set_nested_does_not_mutate() -> None:
+    original = {"user": {"name": "anon"}}
+    result = tool_json_set(original, "user.name", "Ada")
+    assert result == {"user": {"name": "Ada"}}
+    assert original == {"user": {"name": "anon"}}
+
+
+def test_json_merge_objects() -> None:
+    original = {"user": {"name": "Ada"}}
+    result = tool_json_merge(original, "user", {"ok": True})
+    assert result == {"user": {"name": "Ada", "ok": True}}
+    assert original == {"user": {"name": "Ada"}}
+
+
+def test_json_set_refuses_dunder_path() -> None:
+    with pytest.raises(ToolError, match="refused"):
+        tool_json_set({}, "__proto__.x", 1)
+
+
+def test_json_set_size_cap() -> None:
+    huge = "x" * (_MAX_JSON_BYTES + 1)
+    with pytest.raises(ToolError, match="too large"):
+        tool_json_set({}, "a", huge)
 
 
 def test_file_sandbox(tmp_path: Path) -> None:
@@ -281,9 +309,28 @@ def test_http_get_follows_public_redirect(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_default_registry_includes_builtins(tmp_path: Path) -> None:
     registry = default_registry(allow_http=False, workspace=tmp_path)
-    for name in ("now", "calc", "json_get", "read_file", "write_file", "http_get"):
+    for name in (
+        "now",
+        "calc",
+        "json_get",
+        "json_set",
+        "json_merge",
+        "read_file",
+        "write_file",
+        "http_get",
+    ):
         assert name in registry.names()
     assert registry.get("calc").run(expression="1 + 2 * 3") == 7
+
+
+def test_json_mutate_example(examples_dir: Path, tmp_settings) -> None:
+    state = run_workflow_file(
+        examples_dir / "json_mutate.yaml",
+        settings=tmp_settings,
+        persist=True,
+    )
+    assert state.status == "succeeded"
+    assert state.output_keys["doc"] == {"user": {"name": "Ada", "ok": True}}
 
 
 def test_calc_pipeline_example(examples_dir: Path, tmp_settings) -> None:

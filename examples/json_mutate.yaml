@@ -1,0 +1,30 @@
+name: json_mutate
+description: >
+  Smoke test — json_set and json_merge builtins. No LLM, no API keys, no network.
+  Run: readyagents run examples/json_mutate.yaml
+
+start: seed
+nodes:
+  - id: seed
+    type: transform
+    template: '{"user": {"name": "anon"}}'
+    parse_json: true
+    output_key: doc
+    next: set_name
+  - id: set_name
+    type: tool
+    tool: json_set
+    arguments:
+      data: "{{doc}}"
+      path: user.name
+      value: Ada
+    output_key: doc
+    next: merge_flag
+  - id: merge_flag
+    type: tool
+    tool: json_merge
+    arguments:
+      data: "{{doc}}"
+      path: user
+      value: '{"ok": true}'
+    output_key: doc

@@ -4,9 +4,15 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+## 0.6.0 — 2026-08-27
+
 ### Added
 
+- **Bounded sequential `foreach`.** `type: foreach` iterates a list from prior state (`items:` path, `max_items` default 32 / max 100). Body is one node; output is the list of per-item results. Resume skips already-ok items. Nested foreach is rejected. Example: `examples/foreach_calc.yaml`.
+- **`json_set` / `json_merge` builtins** (size-capped like `json_get`). Dotted paths; `__` segments refused. Example: `examples/json_mutate.yaml`.
 - **Bounded agent tool-use loop.** Agent nodes may set `tools: [calc, …]` (an allowlist of registry/MCP names) and optional `max_tool_rounds` (default 8, hard max 20). The engine passes tool specs into `complete(..., tools=)`, runs **real** registry tools, and uses the **final** model text as the node output. Omit `tools` for a one-shot complete (0.4.0). Unknown YAML names fail before any LLM call; a model request off the allowlist is not executed. `--dry-run` still skips the LLM and does not run `write_file` / `http_get`. Example: `examples/agent_tools.yaml`.
+- **Agent tool-round traces and recoverable tool errors.** Allowlisted `ToolError` is fed back as a tool observation (loop continues until the round cap). Persisted `node_results[].tool_rounds` and `runs show --json` name the tools.
+- **Run-store hygiene.** Paused records store the approval **prompt** plus resume/decide copy-paste. `readyagents runs delete RUN_ID --yes` and `runs gc --yes` (paused kept unless `--include-paused`). KeyboardInterrupt persists status `cancelled`. `pending` is cleared on resume and success.
 
 ### Safety
 

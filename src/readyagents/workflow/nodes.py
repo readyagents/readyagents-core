@@ -54,6 +54,9 @@ _APPROVE_VALUES = {"approve", "approved", "yes", "true", "accept", "ok"}
 _REJECT_VALUES = {"reject", "rejected", "deny", "denied", "no", "false"}
 _MAX_INCLUDE_DEPTH = 8
 _MAX_PARALLEL = 8
+_DEFAULT_MAX_FOREACH = 32
+_HARD_MAX_FOREACH = 100
+_FOREACH_META = "_foreach"
 # Dry-run still walks the graph; these tools must not hit the network or disk.
 _DRY_RUN_STUB_TOOLS = frozenset({"http_get", "write_file"})
 _DEFAULT_MAX_TOOL_ROUNDS = 8
@@ -111,6 +114,7 @@ class ExecutionContext:
         self.fallback_models = list(fallback_models or [])
         self.cache_llm = cache_llm
         self.usage_state = usage_state
+        self.last_tool_rounds: list[dict[str, Any]] = []
 
     def decision_for(self, node_id: str) -> str | None:
         value = self.decisions.get(node_id)
@@ -171,6 +175,8 @@ def execute_node(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         return _run_parallel(node, state, ctx)
     if kind == NodeType.include.value:
         return _run_include(node, state, ctx)
+    if kind == NodeType.foreach.value:
+        return _run_foreach(node, state, ctx)
     known = ", ".join(t.value for t in NodeType)
     raise WorkflowError(
         f"Unsupported node type '{node.type}' on node '{node.id}'. "
@@ -182,6 +188,7 @@ def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     ns = state.mapping()
     prompt = interpolate(node.prompt or "", ns)
     system = interpolate(node.system, ns) if node.system else None
+    ctx.last_tool_rounds = []
     allowlist = list(node.tools or [])
     tool_specs = _resolve_agent_tool_specs(node, ctx, allowlist) if allowlist else None
     if ctx.dry_run:
@@ -237,6 +244,16 @@ def _tool_result_content(value: Any) -> str:
         return str(value)
 
 
+_TRACE_LIMIT = 400
+
+
+def _truncate_trace(value: Any, limit: int = _TRACE_LIMIT) -> str:
+    text = value if isinstance(value, str) else _tool_result_content(value)
+    if len(text) > limit:
+        return text[: limit - 1] + "…"
+    return text
+
+
 def _invoke_agent_tool(node: NodeSpec, ctx: ExecutionContext, call: ToolCall) -> Any:
     name = call.name
     args = call.arguments if isinstance(call.arguments, dict) else {}
@@ -285,7 +302,33 @@ def _agent_tool_loop(
                 node_id=node.id,
                 tool=call.name,
             )
-            output = _invoke_agent_tool(node, ctx, call)
+            try:
+                output = _invoke_agent_tool(node, ctx, call)
+            except ToolError as exc:
+                err_text = str(exc)
+                ctx.last_tool_rounds.append(
+                    {
+                        "name": call.name,
+                        "status": "error",
+                        "error": _truncate_trace(err_text),
+                    }
+                )
+                messages.append(
+                    Message(
+                        role="tool",
+                        content=_tool_result_content({"error": err_text}),
+                        tool_call_id=call.id,
+                        name=call.name,
+                    )
+                )
+                continue
+            ctx.last_tool_rounds.append(
+                {
+                    "name": call.name,
+                    "status": "ok",
+                    "output": _truncate_trace(output),
+                }
+            )
             messages.append(
                 Message(
                     role="tool",
@@ -590,6 +633,97 @@ def _call_with_timeout(node: NodeSpec, state: RunState, ctx: ExecutionContext) -
     if "error" in box:
         raise box["error"]
     return box["value"]
+
+
+def _foreach_cap(node: NodeSpec) -> int:
+    raw = node.max_items if node.max_items is not None else _DEFAULT_MAX_FOREACH
+    return max(1, min(int(raw), _HARD_MAX_FOREACH))
+
+
+def _foreach_items(node: NodeSpec, state: RunState) -> list[Any]:
+    ns = state.mapping()
+    raw: Any
+    try:
+        raw = lookup(ns, node.items or "")
+    except TemplateError:
+        text = interpolate(node.items or "", ns)
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            raw = text
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        if stripped.startswith("[") or stripped.startswith("{"):
+            try:
+                raw = json.loads(stripped)
+            except json.JSONDecodeError:
+                pass
+    if not isinstance(raw, list):
+        raise NodeError(node.id, f"foreach items must be a list (got {type(raw).__name__})")
+    return raw
+
+
+def _run_foreach(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> list[Any]:
+    body = node.body
+    if body is None:
+        raise NodeError(node.id, "foreach nodes require 'body'")
+    items = _foreach_items(node, state)
+    cap = _foreach_cap(node)
+    if len(items) > cap:
+        raise NodeError(node.id, f"foreach exceeded max_items={cap}")
+    bucket = state.metadata.setdefault(_FOREACH_META, {})
+    if not isinstance(bucket, dict):
+        bucket = {}
+        state.metadata[_FOREACH_META] = bucket
+    prior = bucket.get(node.id) if isinstance(bucket.get(node.id), list) else []
+    outputs: list[Any] = []
+    for row in prior:
+        if isinstance(row, dict) and row.get("status") == "ok":
+            outputs.append(row.get("output"))
+    start = len(outputs)
+    for index, item in enumerate(items):
+        if index < start:
+            continue
+        child = RunState.start(
+            state.workflow_name,
+            {**state.inputs, "item": item, "index": index},
+            metadata=state.metadata,
+            run_id=state.run_id,
+        )
+        child.node_outputs = dict(state.node_outputs)
+        child.output_keys = dict(state.output_keys)
+        child.node_outputs["item"] = item
+        child.output_keys["item"] = item
+        child.node_outputs["index"] = index
+        child.output_keys["index"] = index
+        item_ctx = ctx
+        prev_rounds = item_ctx.last_tool_rounds
+        item_ctx.last_tool_rounds = []
+        try:
+            output, _attempt = execute_node_with_policy(body, child, item_ctx)
+        except ApprovalRequired:
+            bucket[node.id] = [
+                {"index": i, "status": "ok", "output": outputs[i]} for i in range(len(outputs))
+            ]
+            if ctx.on_persist is not None:
+                ctx.on_persist(state)
+            raise
+        except Exception:
+            bucket[node.id] = [
+                {"index": i, "status": "ok", "output": outputs[i]} for i in range(len(outputs))
+            ]
+            if ctx.on_persist is not None:
+                ctx.on_persist(state)
+            raise
+        finally:
+            item_ctx.last_tool_rounds = prev_rounds
+        outputs.append(output)
+        bucket[node.id] = [
+            {"index": i, "status": "ok", "output": outputs[i]} for i in range(len(outputs))
+        ]
+        if ctx.on_persist is not None:
+            ctx.on_persist(state)
+    return outputs
 
 
 def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dict[str, Any]:

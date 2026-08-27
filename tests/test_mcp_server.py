@@ -24,12 +24,28 @@ def test_construct_server_exposes_builtin_tools(tmp_path: Path) -> None:
     assert hasattr(server, "tool")
     assert hasattr(server, "run")
     by_name = {t.name: t for t in server._tool_manager.list_tools()}
-    for expected in ("now", "calc", "json_get", "read_file", "write_file", "http_get", "run_workflow"):
+    for expected in (
+        "now",
+        "calc",
+        "json_get",
+        "json_set",
+        "json_merge",
+        "read_file",
+        "write_file",
+        "http_get",
+        "run_workflow",
+    ):
         assert expected in by_name
     assert by_name["calc"].fn(expression="2 + 2 * 10") == "22"
     stamp = by_name["now"].fn()
     assert "T" in stamp
     assert by_name["json_get"].fn(data='{"value": 9}', path="value") == "9"
+    set_doc = by_name["json_set"].fn(
+        data='{"user": {"name": "anon"}}', path="user.name", value="Ada"
+    )
+    assert json.loads(set_doc) == {"user": {"name": "Ada"}}
+    merged = by_name["json_merge"].fn(data=set_doc, path="user", value='{"ok": true}')
+    assert json.loads(merged) == {"user": {"name": "Ada", "ok": True}}
     written = by_name["write_file"].fn(path="note.txt", content="hello")
     assert Path(written).read_text(encoding="utf-8") == "hello"
     assert by_name["read_file"].fn(path="note.txt") == "hello"

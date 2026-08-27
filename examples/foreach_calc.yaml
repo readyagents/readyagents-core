@@ -1,0 +1,24 @@
+name: foreach_calc
+version: "1"
+description: >
+  Bounded sequential foreach over a list of calc expressions. No API keys.
+  Run: readyagents run examples/foreach_calc.yaml
+
+inputs:
+  expressions:
+    - "1+1"
+    - "2+2"
+
+start: each
+nodes:
+  - id: each
+    type: foreach
+    items: expressions
+    max_items: 32
+    output_key: results
+    body:
+      id: math
+      type: tool
+      tool: calc
+      arguments:
+        expression: "{{item}}"

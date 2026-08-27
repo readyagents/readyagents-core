@@ -21,6 +21,7 @@ from readyagents.tools import default_registry
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
 from readyagents.workflow.schema import WorkflowSpec
+from readyagents.workflow.state import persist_run
 
 runner = CliRunner()
 
@@ -71,6 +72,47 @@ def test_happy_path_runs_real_calc(tmp_path: Path) -> None:
     assert tool_msgs, "second complete must include a tool result"
     assert any("4" in (m.content or "") for m in tool_msgs)
     assert all("2+2" not in (m.content or "") for m in tool_msgs)
+
+
+def test_tool_error_fed_back_then_real_calc(tmp_path: Path, tmp_settings) -> None:
+    llm = ScriptedLLM()
+    llm.enqueue(
+        "",
+        tool_calls=[ToolCall(id="bad", name="calc", arguments={"expression": "not-a-number"})],
+    )
+    llm.enqueue(
+        "",
+        tool_calls=[ToolCall(id="ok", name="calc", arguments={"expression": "2+2"})],
+    )
+    llm.enqueue("final-answer")
+    spec = WorkflowSpec.model_validate(_agent_spec(tools=["calc"]))
+
+    def save(state) -> None:
+        persist_run(state, tmp_settings.runs_dir())
+
+    ctx = ExecutionContext(
+        spec,
+        _registry(tmp_path),
+        llm=llm,
+        default_model="mock:test",
+        on_persist=save,
+    )
+    state = run_workflow(spec, {}, ctx)
+    assert state.status == "succeeded"
+    assert state.output_keys["answer"] == "final-answer"
+    assert len(llm.calls) == 3
+    error_msgs = [m for m in llm.calls[1]["messages"] if m.role == "tool"]
+    assert error_msgs
+    assert any("error" in (m.content or "").lower() for m in error_msgs)
+    good_msgs = [m for m in llm.calls[2]["messages"] if m.role == "tool"]
+    assert any("4" in (m.content or "") for m in good_msgs)
+    rounds = state.results[0].tool_rounds
+    assert any(row.get("name") == "calc" and row.get("status") == "error" for row in rounds)
+    assert any(row.get("name") == "calc" and row.get("status") == "ok" for row in rounds)
+    dumped = persist_run(state, tmp_settings.runs_dir())
+    text = dumped.read_text(encoding="utf-8")
+    assert "calc" in text
+    assert "tool_rounds" in text
 
 
 def test_allowlist_rejects_write_file(tmp_path: Path) -> None:
@@ -176,14 +218,20 @@ def test_agent_http_get_loopback_refused(tmp_path: Path) -> None:
             )
         ],
     )
-    with pytest.raises(NodeError, match="loopback|blocked|private") as exc:
-        run_workflow_spec(
-            _agent_spec(tools=["http_get"]),
-            llm=llm,
-            tools=_registry(tmp_path, allow_http=True),
-        )
-    assert "127.0.0.1" in str(exc.value) or "loopback" in str(exc.value).lower()
-    assert len(llm.calls) == 1
+    llm.enqueue("blocked")
+    state = run_workflow_spec(
+        _agent_spec(tools=["http_get"]),
+        llm=llm,
+        tools=_registry(tmp_path, allow_http=True),
+    )
+    assert state.status == "succeeded"
+    assert state.output_keys["answer"] == "blocked"
+    error_msgs = [m for m in llm.calls[1]["messages"] if m.role == "tool"]
+    blob = " ".join(m.content or "" for m in error_msgs).lower()
+    assert "loopback" in blob or "blocked" in blob or "private" in blob
+    assert "127.0.0.1" in " ".join(m.content or "" for m in error_msgs) or "loopback" in blob
+    rounds = state.results[0].tool_rounds
+    assert any(row.get("name") == "http_get" and row.get("status") == "error" for row in rounds)
 
 
 def test_budget_stops_later_complete_round(tmp_path: Path) -> None:

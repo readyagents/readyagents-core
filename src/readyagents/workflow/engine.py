@@ -49,6 +49,7 @@ def run_workflow(
 
     if ctx.usage_state is None:
         ctx.usage_state = state
+    _persist(ctx, state)
     log_event(
         log,
         "run_start",
@@ -96,12 +97,35 @@ def run_workflow(
                 )
             current = _next_node(workflow, node, state)
         state.pending_node = None
+        state.pending = None
         state.finish("succeeded")
         _persist(ctx, state)
         if ctx.auditor is not None:
             ctx.auditor("run_finished", run_id=state.run_id, status="succeeded", actor=ctx.actor)
+    except KeyboardInterrupt:
+        state.pending_node = current
+        state.pending = {
+            "node_id": current,
+            "type": str(nodes[current].type) if current in nodes else "?",
+            "error": "cancelled",
+        }
+        state.finish("cancelled")
+        _persist(ctx, state)
+        raise
     except ApprovalRequired as exc:
         state.pending_node = current
+        paused = nodes.get(current) if current else None
+        state.pending = {
+            "node_id": exc.node_id,
+            "type": "approval",
+            "prompt": exc.prompt,
+            "then": getattr(paused, "then", None),
+            "else": getattr(paused, "else_", None),
+            "resume": f"readyagents resume {state.run_id} --approve {exc.node_id}",
+            "decide": (
+                f"readyagents decide {state.run_id} --node {exc.node_id} --decision approve"
+            ),
+        }
         state.finish("paused")
         _persist(ctx, state)
         exc.state = state
@@ -122,6 +146,11 @@ def run_workflow(
             str(nodes[current].type) if current in nodes else "?",
             str(exc),
         )
+        state.pending = {
+            "node_id": current,
+            "type": str(nodes[current].type) if current in nodes else "?",
+            "error": str(exc),
+        }
         state.finish("failed")
         _persist(ctx, state)
         exc.state = state
@@ -163,6 +192,7 @@ def _resume_cursor(workflow: WorkflowSpec, state: RunState) -> tuple[str | None,
         if current not in completed:
             state.node_outputs.pop(current, None)
     state.pending_node = None
+    state.pending = None
     state.status = "running"
     state.finished_at = None
     return current, completed
@@ -195,6 +225,8 @@ def _execute_with_policy(node: NodeSpec, state: RunState, ctx: ExecutionContext)
         state.take_node_usage()
         raise
     usage = state.take_node_usage()
+    rounds = list(ctx.last_tool_rounds or [])
+    ctx.last_tool_rounds = []
     state.record(
         node.id,
         output,
@@ -204,6 +236,7 @@ def _execute_with_policy(node: NodeSpec, state: RunState, ctx: ExecutionContext)
         started_at=started,
         finished_at=utc_now(),
         usage=usage,
+        tool_rounds=rounds,
     )
 
 

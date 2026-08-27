@@ -7,12 +7,12 @@ We are not launching. We are listening.
 
 This is the free core of [ReadyAgents](https://github.com/readyagents). Commercial **packs** (always-on / continuous systems, hosted control plane) sit on top of this engine. They are not required to run workflows.
 
-Package `readyagents` **0.4.0**. Packaging is PyPI-ready (sdist + wheel); this repo is still the install source until a publish.
+Package `readyagents` **0.6.0**. Packaging is PyPI-ready (sdist + wheel); this repo is still the install source until a publish.
 
 ## What it does
 
 - Define agent workflows as YAML or JSON (nodes + edges)
-- Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, and **include** nodes. Agent nodes may declare a `tools:` allowlist for a bounded tool-use loop.
+- Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, **include**, and **foreach** nodes. Agent nodes may declare a `tools:` allowlist for a bounded tool-use loop.
 - Persist after every node and **resume** a paused or failed run from the last successful node
 - Inspect past runs: `readyagents runs list` / `show` / `replay` / `report` (local HTML)
 - Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`)
@@ -106,6 +106,8 @@ flowchart LR
 | `readyagents runs show RUN_ID` | Node timeline + stored state (`inspect` is an alias) |
 | `readyagents runs report RUN_ID` | Local HTML summary of a run |
 | `readyagents runs replay RUN_ID` | New run from stored inputs |
+| `readyagents runs delete RUN_ID --yes` | Delete one local run record |
+| `readyagents runs gc --yes` | Prune succeeded/failed/cancelled runs (paused kept) |
 | `readyagents mcp serve` | Stdio MCP server (builtin tools) |
 | `readyagents packs` | List installed packs |
 | `readyagents version` | Print version |
@@ -124,6 +126,8 @@ flowchart LR
 | `examples/support_triage.yaml` | Classify then branch (needs a key) |
 | `examples/code_review.yaml` | `read_file` + review (needs a key) |
 | `examples/agent_tools.yaml` | Agent `tools: [calc]` (needs a key; `--dry-run` is keyless) |
+| `examples/foreach_calc.yaml` | Sequential foreach + `calc` (no keys) |
+| `examples/json_mutate.yaml` | `json_set` / `json_merge` (no keys) |
 
 ## Docs
 
@@ -136,7 +140,7 @@ flowchart LR
 - [Packs](docs/packs.md)
 - [CLI](docs/cli.md)
 - [Changelog](CHANGELOG.md)
-- [Release notes 0.4.0](RELEASE_NOTES.md)
+- [Release notes 0.6.0](RELEASE_NOTES.md)
 
 ## Install extras (still from this checkout)
 

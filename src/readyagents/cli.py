@@ -26,6 +26,8 @@ from readyagents.workflow.runner import (
 from readyagents.workflow.state import (
     RunState,
     build_decisions,
+    delete_run,
+    gc_runs,
     list_runs,
     load_decision_file,
     load_run,
@@ -303,8 +305,14 @@ def run(
                 actor=actor,
                 no_cache=no_cache,
             )
-    except ReadyAgentsError as exc:
-        _emit_run_exception(exc, as_json=as_json, persist=persist)
+    except KeyboardInterrupt:
+        if as_json:
+            _print_json({"error": "cancelled", "status": "cancelled"})
+        else:
+            err_console.print("[yellow]cancelled[/yellow]")
+        raise typer.Exit(code=1) from None
+    except ReadyAgentsError as extra:
+        _emit_run_exception(extra, as_json=as_json, persist=persist)
     _emit_run(state, as_json=as_json)
 
 
@@ -358,8 +366,14 @@ def resume_cmd(
             actor=actor,
             no_cache=no_cache,
         )
-    except ReadyAgentsError as exc:
-        _emit_run_exception(exc, as_json=as_json, persist=persist)
+    except KeyboardInterrupt:
+        if as_json:
+            _print_json({"error": "cancelled", "status": "cancelled"})
+        else:
+            err_console.print("[yellow]cancelled[/yellow]")
+        raise typer.Exit(code=1) from None
+    except ReadyAgentsError as extra:
+        _emit_run_exception(extra, as_json=as_json, persist=persist)
     _emit_run(state, as_json=as_json)
 
 
@@ -572,6 +586,64 @@ def runs_replay(
     _emit_run(state, as_json=as_json)
 
 
+@runs_app.command("delete")
+def runs_delete(
+    run_id: str = typer.Argument(..., help="Run id (or unique prefix)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt."),
+) -> None:
+    """Delete one persisted run JSON file."""
+    from readyagents.config import get_settings
+
+    settings = get_settings()
+    try:
+        state = load_run(settings.runs_dir(), run_id)
+        if not yes:
+            console.print(f"Delete run {state.run_id} ({state.status})? Pass --yes to confirm.")
+            raise typer.Exit(code=1)
+        path = delete_run(settings.runs_dir(), run_id)
+    except ReadyAgentsError as extra:
+        _fail(extra)
+        return
+    console.print(f"[green]Deleted[/green] {path}")
+
+
+@runs_app.command("gc")
+def runs_gc_cmd(
+    status: list[str] = typer.Option(
+        ["succeeded", "failed", "cancelled"],
+        "--status",
+        help="Statuses to delete (repeatable).",
+    ),
+    keep: int = typer.Option(0, "--keep", help="Keep this many newest matching runs."),
+    include_paused: bool = typer.Option(
+        False,
+        "--include-paused",
+        help="Also delete paused runs (off by default).",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not prompt."),
+) -> None:
+    """Delete old succeeded/failed/cancelled runs. Paused runs are kept unless forced."""
+    from readyagents.config import get_settings
+
+    settings = get_settings()
+    if not yes:
+        console.print("Pass --yes to garbage-collect matching run files.")
+        raise typer.Exit(code=1)
+    try:
+        deleted = gc_runs(
+            settings.runs_dir(),
+            statuses=status,
+            include_paused=include_paused,
+            keep=keep,
+        )
+    except ReadyAgentsError as extra:
+        _fail(extra)
+        return
+    console.print(f"[green]Deleted {len(deleted)} run(s)[/green]")
+    for rid in deleted:
+        console.print(f"  {rid}")
+
+
 @mcp_app.command("serve")
 def mcp_serve() -> None:
     """Expose builtin tools (and run_workflow) over MCP stdio."""
@@ -609,6 +681,13 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
     console.print(f"status: {state.status}")
     if state.pending_node:
         console.print(f"pending_node: {state.pending_node}")
+    if state.pending:
+        prompt = state.pending.get("prompt")
+        if prompt:
+            console.print(Panel(escape(str(prompt)), title="Pending prompt"))
+        resume_hint = state.pending.get("resume")
+        if resume_hint:
+            console.print(f"Resume: [cyan]{escape(str(resume_hint))}[/cyan]")
     _print_usage(state)
     _print_run(state)
     if state.output_keys:
@@ -729,6 +808,9 @@ def _print_run(state: RunState) -> None:
     table.add_column("Output", overflow="fold")
     for result in state.results:
         preview = result.error or _preview(result.output)
+        if result.tool_rounds:
+            names = ",".join(str(row.get("name") or "?") for row in result.tool_rounds)
+            preview = f"{preview}  [tools:{names}]"
         table.add_row(result.node_id, result.type, result.status, escape(preview))
     console.print(table)
 

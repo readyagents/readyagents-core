@@ -48,7 +48,7 @@ readyagents run hello.yaml --input name=Ada
 | Field | Meaning |
 | --- | --- |
 | `id` | Unique id |
-| `type` | `agent` \| `tool` \| `condition` \| `transform` \| `approval` \| `parallel` \| `include` |
+| `type` | `agent` \| `tool` \| `condition` \| `transform` \| `approval` \| `parallel` \| `include` \| `foreach` |
 | `next` | Default successor if no edges |
 | `output_key` | Alias for templates (`{{brief}}` instead of `{{write}}`) |
 | `timeout_seconds` | Soft timeout |
@@ -113,7 +113,7 @@ Optional agent fields:
   output_key: total
 ```
 
-Builtin tools: `now`, `calc`, `json_get`, `read_file`, `write_file`, `http_get` (opt-in).
+Builtin tools: `now`, `calc`, `json_get`, `json_set`, `json_merge`, `read_file`, `write_file`, `http_get` (opt-in).
 
 MCP tools are named `server.tool` (and also the bare tool name if unique).
 
@@ -191,6 +191,24 @@ Templates can use `{{parts.left}}`. Max 8 worker threads.
 
 Includes are depth-limited (8) so cycles fail with a typed error. Nested runs do not write their own run records. The `path` is resolved relative to the parent workflow file and must stay under that directory (no `..` or absolute escapes).
 
+## Foreach (sequential map)
+
+```yaml
+- id: each
+  type: foreach
+  items: expressions    # list on inputs or prior outputs
+  max_items: 32         # default 32, max 100
+  body:
+    id: math
+    type: tool
+    tool: calc
+    arguments:
+      expression: "{{item}}"
+  output_key: results
+```
+
+The body runs once per item (`{{item}}` and `{{index}}`). Nested foreach is rejected. Resume skips items already stored as `ok`. Exceeding `max_items` raises `NodeError`.
+
 ## Transform
 
 ```yaml
@@ -250,3 +268,5 @@ readyagents runs replay <run_id>
 | `examples/support_triage.yaml` | Yes | JSON classify then branch |
 | `examples/code_review.yaml` | Yes | Builtin `read_file` + review |
 | `examples/agent_tools.yaml` | Yes (dry-run: no) | Agent `tools: [calc]` allowlist |
+| `examples/foreach_calc.yaml` | No | Sequential `foreach` + `calc` |
+| `examples/json_mutate.yaml` | No | `json_set` / `json_merge` |

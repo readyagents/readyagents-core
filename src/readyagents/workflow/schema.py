@@ -18,6 +18,7 @@ class NodeType(StrEnum):
     approval = "approval"
     parallel = "parallel"
     include = "include"
+    foreach = "foreach"
 
 
 class RetrySpec(BaseModel):
@@ -98,6 +99,11 @@ class NodeSpec(BaseModel):
     tools: list[str] = Field(default_factory=list)
     max_tool_rounds: int | None = Field(default=None, ge=1, le=20)
 
+    # foreach
+    items: str | None = None
+    max_items: int | None = Field(default=None, ge=1, le=100)
+    body: NodeSpec | None = None
+
     @field_validator("id")
     @classmethod
     def _id_token(cls, value: str) -> str:
@@ -162,6 +168,13 @@ class NodeSpec(BaseModel):
             raise ValueError(f"Node '{self.id}': parallel nodes require 'branches'")
         if t == NodeType.include.value and not self.path:
             raise ValueError(f"Node '{self.id}': include nodes require 'path'")
+        if t == NodeType.foreach.value:
+            if not self.items:
+                raise ValueError(f"Node '{self.id}': foreach nodes require 'items'")
+            if self.body is None:
+                raise ValueError(f"Node '{self.id}': foreach nodes require 'body'")
+            if self.body.type == NodeType.foreach.value:
+                raise ValueError(f"Node '{self.id}': nested foreach is not supported")
         return self
 
 

@@ -15,6 +15,8 @@ pip install -e ".[mcp]"
 | `now` | — | UTC ISO-8601 |
 | `calc` | `expression` | Arithmetic only (`+ - * / // % **`) |
 | `json_get` | `data`, `path` | Dotted path into JSON/dict |
+| `json_set` | `data`, `path`, `value` | Set a dotted path; returns the full document |
+| `json_merge` | `data`, `path`, `value` | Merge an object at a dotted path (`""` / `"."` merges at the root) |
 | `read_file` | `path` | Sandboxed to workspace |
 | `write_file` | `path`, `content` | Sandboxed to workspace |
 | `http_get` | `url` | Off until `READYAGENTS_ALLOW_HTTP=1` or `allow_http: true`; private/loopback/metadata URLs stay blocked |
@@ -45,7 +47,7 @@ Core examples do **not** require MCP servers.
 readyagents mcp serve
 ```
 
-Speaks MCP over **stdio**. Other agents can call `now`, `calc`, `json_get`, `read_file`, `write_file`, `http_get` (if enabled), and `run_workflow`.
+Speaks MCP over **stdio**. Other agents can call `now`, `calc`, `json_get`, `json_set`, `json_merge`, `read_file`, `write_file`, `http_get` (if enabled), and `run_workflow`.
 
 `run_workflow` takes `path` (workflow file) and `inputs_json` (JSON object). `path` must stay under the server workspace (the same sandbox as `read_file` / `write_file`).
 

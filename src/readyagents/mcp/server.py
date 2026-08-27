@@ -57,6 +57,7 @@ def serve_stdio(*, allow_http: bool | None = None, workspace: Path | None = None
 
 def _register_server_tools(server: Any, tools: dict[str, Any], *, workspace: Path) -> None:
     root = Path(workspace).resolve()
+
     @server.tool(name="now", description=tools["now"].description)
     def now() -> str:
         return str(tools["now"].run())
@@ -70,6 +71,24 @@ def _register_server_tools(server: Any, tools: dict[str, Any], *, workspace: Pat
         import json
 
         result = tools["json_get"].run(data=data, path=path)
+        if isinstance(result, (dict, list)):
+            return json.dumps(result)
+        return str(result)
+
+    @server.tool(name="json_set", description=tools["json_set"].description)
+    def json_set(data: str, path: str, value: str) -> str:
+        import json
+
+        result = tools["json_set"].run(data=data, path=path, value=value)
+        if isinstance(result, (dict, list)):
+            return json.dumps(result)
+        return str(result)
+
+    @server.tool(name="json_merge", description=tools["json_merge"].description)
+    def json_merge(data: str, path: str, value: str) -> str:
+        import json
+
+        result = tools["json_merge"].run(data=data, path=path, value=value)
         if isinstance(result, (dict, list)):
             return json.dumps(result)
         return str(result)

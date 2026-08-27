@@ -117,6 +117,8 @@ def test_example_workflows_validate(examples_dir: Path) -> None:
         "included_min.yaml",
         "composed_gate.yaml",
         "agent_tools.yaml",
+        "foreach_calc.yaml",
+        "json_mutate.yaml",
     ):
         spec = load_workflow(examples_dir / name)
         assert spec.nodes

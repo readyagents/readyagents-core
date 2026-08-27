@@ -29,6 +29,8 @@ smoke:
 	readyagents run examples/multi_gate.yaml --approve first --approve second --no-persist
 	readyagents run examples/support_triage.yaml --dry-run --no-persist --input message=hello
 	readyagents run examples/agent_tools.yaml --dry-run --no-persist
+	readyagents run examples/foreach_calc.yaml --no-persist
+	readyagents run examples/json_mutate.yaml --no-persist
 	@rm -rf .readyagents-smoke
 	@set -e; \
 	  export READYAGENTS_HOME=.readyagents-smoke; \

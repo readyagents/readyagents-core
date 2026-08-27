@@ -94,11 +94,30 @@ List persisted runs (newest first). Each line includes `run_id`. `--json` prints
 
 ## `readyagents runs show RUN_ID`
 
-Show status, pending node (if paused), **node timeline**, inputs, and outputs. `readyagents runs inspect RUN_ID` is an alias. `--json` prints the stored run record. Missing or ambiguous ids print `{ok: false, error, message, run_id}` (exit 1).
+Show status, pending node (if paused), **pending prompt** (HITL), **node timeline**, inputs, and outputs. `readyagents runs inspect RUN_ID` is an alias. `--json` prints the stored run record including `pending` and per-node `tool_rounds`. Missing or ambiguous ids print `{ok: false, error, message, run_id}` (exit 1).
 
 ## `readyagents runs replay RUN_ID`
 
 Start a **new** run with the stored workflow path and inputs (not a resume).
+
+## `readyagents runs delete RUN_ID`
+
+Delete one local run JSON file. Requires `--yes`.
+
+```bash
+readyagents runs delete abcdef --yes
+```
+
+## `readyagents runs gc`
+
+Delete succeeded/failed/cancelled run files. **Paused** runs are kept unless `--include-paused`. Requires `--yes`. `--keep N` leaves the newest N runs.
+
+```bash
+readyagents runs gc --yes
+readyagents runs gc --yes --status succeeded --keep 20
+```
+
+Ctrl-C during a persisted run stores status `cancelled` (not leftover `running`).
 
 ## `readyagents runs report RUN_ID`
 

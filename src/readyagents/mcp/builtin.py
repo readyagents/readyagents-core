@@ -41,6 +41,7 @@ _MAX_POW_EXP = 32
 _MAX_FILE_BYTES = 1_000_000
 _MAX_JSON_BYTES = 1_000_000
 _MAX_CALC_CHARS = 256
+_JSON_REFUSED_SEGMENTS = frozenset({"constructor", "prototype"})
 _BLOCKED_HOST_NAMES = frozenset(
     {
         "localhost",
@@ -83,6 +84,34 @@ def builtin_tools(*, allow_http: bool, workspace: Path) -> list[Tool]:
                 "required": ["data", "path"],
             },
             handler=tool_json_get,
+        ),
+        FunctionTool(
+            name="json_set",
+            description="Set a dotted path in JSON text or an object and return the document.",
+            schema={
+                "type": "object",
+                "properties": {
+                    "data": {},
+                    "path": {"type": "string"},
+                    "value": {},
+                },
+                "required": ["data", "path", "value"],
+            },
+            handler=tool_json_set,
+        ),
+        FunctionTool(
+            name="json_merge",
+            description="Merge a JSON object at a dotted path (empty path merges at the root).",
+            schema={
+                "type": "object",
+                "properties": {
+                    "data": {},
+                    "path": {"type": "string"},
+                    "value": {},
+                },
+                "required": ["data", "path", "value"],
+            },
+            handler=tool_json_merge,
         ),
         FunctionTool(
             name="read_file",
@@ -162,20 +191,7 @@ def _eval_ast(node: ast.AST) -> int | float:
 
 
 def tool_json_get(data: Any, path: str) -> Any:
-    current: Any = data
-    if isinstance(current, (bytes, bytearray)):
-        if len(current) > _MAX_JSON_BYTES:
-            raise ToolError(f"json_get: data too large (max {_MAX_JSON_BYTES} bytes)")
-        current = current.decode("utf-8")
-    if isinstance(current, str):
-        if len(current.encode("utf-8")) > _MAX_JSON_BYTES:
-            raise ToolError(f"json_get: data too large (max {_MAX_JSON_BYTES} bytes)")
-        text = current.strip()
-        if text:
-            try:
-                current = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise ToolError(f"json_get: data is not valid JSON: {exc}") from exc
+    current: Any = _parse_json_input(data, tool="json_get")
     for part in str(path).split("."):
         if part == "":
             continue
@@ -192,6 +208,183 @@ def tool_json_get(data: Any, path: str) -> Any:
             continue
         raise ToolError(f"json_get: path not found: {path}")
     return current
+
+
+def tool_json_set(data: Any, path: str, value: Any) -> Any:
+    doc = _json_clone(_parse_json_input(data, tool="json_set"), tool="json_set")
+    parsed = _json_clone(_parse_json_value(value, tool="json_set"), tool="json_set")
+    parts = _json_path_parts(path, tool="json_set")
+    result = _json_assign(doc, parts, parsed, tool="json_set")
+    _assert_json_size(result, tool="json_set")
+    return result
+
+
+def tool_json_merge(data: Any, path: str, value: Any) -> Any:
+    doc = _json_clone(_parse_json_input(data, tool="json_merge"), tool="json_merge")
+    parsed = _json_clone(_parse_json_value(value, tool="json_merge"), tool="json_merge")
+    if not isinstance(parsed, dict):
+        raise ToolError("json_merge: value must be an object")
+    parts = _json_path_parts(path, tool="json_merge", allow_root=True)
+    result = _json_merge_at(doc, parts, parsed, tool="json_merge")
+    _assert_json_size(result, tool="json_merge")
+    return result
+
+
+def _parse_json_input(data: Any, *, tool: str) -> Any:
+    current: Any = data
+    if isinstance(current, (bytes, bytearray)):
+        if len(current) > _MAX_JSON_BYTES:
+            raise ToolError(f"{tool}: data too large (max {_MAX_JSON_BYTES} bytes)")
+        current = current.decode("utf-8")
+    if isinstance(current, str):
+        if len(current.encode("utf-8")) > _MAX_JSON_BYTES:
+            raise ToolError(f"{tool}: data too large (max {_MAX_JSON_BYTES} bytes)")
+        text = current.strip()
+        if text:
+            try:
+                current = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise ToolError(f"{tool}: data is not valid JSON: {exc}") from exc
+    return current
+
+
+def _parse_json_value(value: Any, *, tool: str) -> Any:
+    current: Any = value
+    if isinstance(current, (bytes, bytearray)):
+        if len(current) > _MAX_JSON_BYTES:
+            raise ToolError(f"{tool}: value too large (max {_MAX_JSON_BYTES} bytes)")
+        current = current.decode("utf-8")
+    if isinstance(current, str):
+        if len(current.encode("utf-8")) > _MAX_JSON_BYTES:
+            raise ToolError(f"{tool}: value too large (max {_MAX_JSON_BYTES} bytes)")
+        text = current.strip()
+        if text:
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return current
+    return current
+
+
+def _json_clone(data: Any, *, tool: str) -> Any:
+    try:
+        return json.loads(json.dumps(data, ensure_ascii=False))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ToolError(f"{tool}: data is not valid JSON: {exc}") from exc
+
+
+def _assert_json_size(data: Any, *, tool: str) -> None:
+    try:
+        blob = json.dumps(data, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        raise ToolError(f"{tool}: result is not valid JSON: {exc}") from exc
+    if len(blob.encode("utf-8")) > _MAX_JSON_BYTES:
+        raise ToolError(f"{tool}: result too large (max {_MAX_JSON_BYTES} bytes)")
+
+
+def _json_path_parts(path: str, *, tool: str, allow_root: bool = False) -> list[str]:
+    text = str(path)
+    if allow_root and text in {"", "."}:
+        return []
+    parts = text.split(".")
+    for part in parts:
+        if part == "":
+            raise ToolError(f"{tool}: empty path segment")
+        if part.startswith("__") or part in _JSON_REFUSED_SEGMENTS:
+            raise ToolError(f"{tool}: refused path segment: {part}")
+    return parts
+
+
+def _json_assign(doc: Any, parts: list[str], value: Any, *, tool: str) -> Any:
+    if not parts:
+        raise ToolError(f"{tool}: path is required")
+    if not isinstance(doc, (dict, list)):
+        raise ToolError(f"{tool}: data must be an object or array")
+    parent = _json_walk_parent(doc, parts[:-1], tool=tool)
+    _json_put(parent, parts[-1], value, tool=tool)
+    return doc
+
+
+def _json_merge_at(doc: Any, parts: list[str], value: dict[str, Any], *, tool: str) -> Any:
+    if not parts:
+        if not isinstance(doc, dict):
+            raise ToolError(f"{tool}: target is not an object")
+        doc.update(value)
+        return doc
+    if not isinstance(doc, (dict, list)):
+        raise ToolError(f"{tool}: data must be an object or array")
+    parent = _json_walk_parent(doc, parts[:-1], tool=tool)
+    target = _json_child_object(parent, parts[-1], tool=tool)
+    target.update(value)
+    return doc
+
+
+def _json_walk_parent(doc: Any, parts: list[str], *, tool: str) -> Any:
+    current = doc
+    for part in parts:
+        current = _json_ensure_container(current, part, tool=tool)
+    return current
+
+
+def _json_ensure_container(current: Any, part: str, *, tool: str) -> Any:
+    if isinstance(current, dict):
+        child = current.get(part, None)
+        if child is None:
+            current[part] = {}
+            return current[part]
+        if not isinstance(child, (dict, list)):
+            raise ToolError(f"{tool}: cannot descend into non-container at {part}")
+        return child
+    if isinstance(current, list):
+        idx = _json_list_index(current, part, tool=tool)
+        child = current[idx]
+        if child is None:
+            current[idx] = {}
+            return current[idx]
+        if not isinstance(child, (dict, list)):
+            raise ToolError(f"{tool}: cannot descend into non-container at {part}")
+        return child
+    raise ToolError(f"{tool}: cannot descend into non-container at {part}")
+
+
+def _json_put(parent: Any, part: str, value: Any, *, tool: str) -> None:
+    if isinstance(parent, dict):
+        parent[part] = value
+        return
+    if isinstance(parent, list):
+        parent[_json_list_index(parent, part, tool=tool)] = value
+        return
+    raise ToolError(f"{tool}: cannot set path")
+
+
+def _json_child_object(parent: Any, part: str, *, tool: str) -> dict[str, Any]:
+    if isinstance(parent, dict):
+        child = parent.get(part, None)
+        if child is None:
+            parent[part] = {}
+            return parent[part]
+        if not isinstance(child, dict):
+            raise ToolError(f"{tool}: target is not an object")
+        return child
+    if isinstance(parent, list):
+        idx = _json_list_index(parent, part, tool=tool)
+        child = parent[idx]
+        if child is None:
+            parent[idx] = {}
+            return parent[idx]
+        if not isinstance(child, dict):
+            raise ToolError(f"{tool}: target is not an object")
+        return child
+    raise ToolError(f"{tool}: target is not an object")
+
+
+def _json_list_index(seq: list[Any], part: str, *, tool: str) -> int:
+    try:
+        idx = int(part)
+        seq[idx]
+    except (ValueError, IndexError) as exc:
+        raise ToolError(f"{tool}: path not found: {part}") from exc
+    return idx
 
 
 def tool_http_get(url: str, *, allow_http: bool) -> str:
@@ -342,9 +535,7 @@ def tool_read_file(path: str, *, workspace: Path) -> str:
     try:
         size = target.stat().st_size
         if size > _MAX_FILE_BYTES:
-            raise ToolError(
-                f"read_file: file too large ({size} bytes, max {_MAX_FILE_BYTES})"
-            )
+            raise ToolError(f"read_file: file too large ({size} bytes, max {_MAX_FILE_BYTES})")
         return target.read_text(encoding="utf-8")
     except ToolError:
         raise
@@ -359,9 +550,7 @@ def tool_write_file(path: str, content: str, *, workspace: Path) -> str:
     payload = str(content)
     size = len(payload.encode("utf-8"))
     if size > _MAX_FILE_BYTES:
-        raise ToolError(
-            f"write_file: content too large ({size} bytes, max {_MAX_FILE_BYTES})"
-        )
+        raise ToolError(f"write_file: content too large ({size} bytes, max {_MAX_FILE_BYTES})")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         tmp = target.parent / f".{target.name}.{uuid4().hex}.tmp"

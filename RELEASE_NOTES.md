@@ -1,3 +1,102 @@
+# ReadyAgents Core 0.6.0
+
+**List-shaped local YAML, inspectable tool-use, operable run store. No always-on.**
+
+0.6.0 is the engine cut after 0.4.0 docs honesty. Install from a clone (`pip install -e .`). This package is not on PyPI.
+
+## Why this release matters
+
+A careful local YAML-first team can now:
+
+1. **Process a list** with bounded sequential `foreach` (`{{item}}` / `{{index}}`, resume skips ok items).
+2. **Mutate JSON** with `json_set` / `json_merge` (same size caps as `json_get`).
+3. **Let an agent call allowlisted tools**, see each round on the run record, and recover from a bad tool call without killing the node.
+4. **Operate the local run store:** pause prompt on the JSON, `runs delete` / `runs gc`, Ctrl-C → `cancelled`.
+
+Core stays small. Packs still own always-on listeners, hosted control planes, extra databases, and billing.
+
+## What is new
+
+### Foreach
+
+```yaml
+- id: each
+  type: foreach
+  items: expressions
+  max_items: 32
+  body:
+    id: math
+    type: tool
+    tool: calc
+    arguments:
+      expression: "{{item}}"
+  output_key: results
+```
+
+`readyagents run examples/foreach_calc.yaml` (no keys). Nested foreach is rejected.
+
+### JSON mutate
+
+```bash
+readyagents run examples/json_mutate.yaml
+```
+
+`json_set` / `json_merge` refuse empty path segments and `__` keys.
+
+### Agent tools
+
+```yaml
+- id: worker
+  type: agent
+  prompt: Use calc if needed. What is 2+2?
+  tools: [calc]
+  max_tool_rounds: 4
+```
+
+`--dry-run` still skips the LLM. `runs show --json` includes `tool_rounds`. Off-allowlist names are not executed.
+
+### Runs
+
+```bash
+readyagents run examples/approval_gate.yaml          # exit 2; record has the prompt
+readyagents runs show <run_id> --json
+readyagents resume <run_id> --approve gate           # pending cleared on success
+readyagents runs delete <run_id> --yes
+readyagents runs gc --yes                            # paused kept unless --include-paused
+```
+
+## Try it (no API keys)
+
+```bash
+pip install -e .
+readyagents run examples/calc_pipeline.yaml
+readyagents run examples/foreach_calc.yaml
+readyagents run examples/json_mutate.yaml
+readyagents run examples/agent_tools.yaml --dry-run
+readyagents run examples/approval_gate.yaml
+```
+
+## What we deliberately left out of core
+
+- Always-on webhook listeners, workers, cron, queue consumers
+- Hosted control plane, SSO, multi-tenant teams, billing
+- Nested foreach, unbounded map, extra databases
+
+## Compatibility
+
+- Python 3.11+
+- Existing 0.4.0 workflow YAML still runs. New fields (`tools`, `max_tool_rounds`, `type: foreach`, `json_set` / `json_merge`) are additive.
+- CLI exit code **2** is still “paused for approval”.
+
+## Docs
+
+- [README](README.md)
+- [Changelog](CHANGELOG.md)
+- [Workflows](docs/workflows.md)
+- [CLI](docs/cli.md)
+
+---
+
 # ReadyAgents Core 0.4.0
 
 **Docs honesty after 0.3.0. No new nodes. No always-on.**

@@ -30,6 +30,7 @@ class NodeResult:
     started_at: str = ""
     finished_at: str = ""
     usage: dict[str, int] = field(default_factory=dict)
+    tool_rounds: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -46,6 +47,7 @@ class RunState:
     errors: list[str] = field(default_factory=list)
     status: str = "running"
     pending_node: str | None = None
+    pending: dict[str, Any] | None = None
     usage: dict[str, int] = field(default_factory=dict)
     started_at: str = field(default_factory=utc_now)
     finished_at: str | None = None
@@ -91,6 +93,7 @@ class RunState:
         started_at: str = "",
         finished_at: str = "",
         usage: Mapping[str, int] | None = None,
+        tool_rounds: list[dict[str, Any]] | None = None,
     ) -> None:
         self.node_outputs[node_id] = output
         if output_key:
@@ -105,6 +108,7 @@ class RunState:
                 started_at=started_at,
                 finished_at=finished_at,
                 usage={str(k): int(v) for k, v in dict(usage or {}).items()},
+                tool_rounds=[dict(row) for row in (tool_rounds or [])],
             )
         )
 
@@ -161,6 +165,7 @@ class RunState:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "pending_node": self.pending_node,
+            "pending": _jsonable(self.pending) if self.pending else None,
             "inputs": _jsonable(self.inputs),
             "outputs": _jsonable(self.output_keys or self.node_outputs),
             "output_keys": _jsonable(self.output_keys),
@@ -176,6 +181,7 @@ class RunState:
                     "started_at": r.started_at,
                     "finished_at": r.finished_at,
                     "usage": dict(r.usage),
+                    "tool_rounds": list(r.tool_rounds),
                 }
                 for r in self.results
             ],
@@ -201,10 +207,17 @@ class RunState:
                     for k, v in dict(row.get("usage") or {}).items()
                     if _is_intlike(v)
                 },
+                tool_rounds=[
+                    dict(item)
+                    for item in (row.get("tool_rounds") or [])
+                    if isinstance(item, Mapping)
+                ],
             )
             for row in data.get("node_results") or []
             if isinstance(row, Mapping)
         ]
+        pending_raw = data.get("pending")
+        pending = dict(pending_raw) if isinstance(pending_raw, Mapping) else None
         return cls(
             run_id=str(data.get("run_id") or ""),
             workflow_name=str(data.get("workflow") or data.get("workflow_name") or ""),
@@ -216,6 +229,7 @@ class RunState:
             errors=list(data.get("errors") or []),
             status=str(data.get("status") or "running"),
             pending_node=data.get("pending_node"),
+            pending=pending,
             usage={str(k): int(v) for k, v in dict(data.get("usage") or {}).items()},
             started_at=str(data.get("started_at") or utc_now()),
             finished_at=data.get("finished_at"),
@@ -238,6 +252,49 @@ def persist_run(state: RunState, runs_dir: Path, *, redactor: Any | None = None)
         if tmp.exists():
             tmp.unlink(missing_ok=True)
     return path
+
+
+def delete_run(runs_dir: Path, run_id: str) -> Path:
+    """Remove one run JSON file. ``run_id`` may be a unique prefix."""
+    state = load_run(runs_dir, run_id)
+    path = Path(runs_dir) / f"{state.run_id}.json"
+    if not path.is_file():
+        raise ConfigError(f"Run not found: {run_id}")
+    path.unlink()
+    return path
+
+
+def gc_runs(
+    runs_dir: Path,
+    *,
+    statuses: list[str] | None = None,
+    include_paused: bool = False,
+    keep: int = 0,
+) -> list[str]:
+    """Delete local run files. Never deletes ``paused`` unless ``include_paused``."""
+    wanted = {s.strip().lower() for s in (statuses or ["succeeded", "failed", "cancelled"])}
+    if include_paused:
+        wanted.add("paused")
+    found = list_runs(runs_dir)
+    if keep and keep > 0:
+        found = found[keep:]
+    deleted: list[str] = []
+    for state in found:
+        if state.status == "paused" and not include_paused:
+            continue
+        if state.status not in wanted:
+            continue
+        path = Path(runs_dir) / f"{state.run_id}.json"
+        if path.is_file():
+            path.unlink()
+            deleted.append(state.run_id)
+    return deleted
+
+
+def mark_cancelled(state: RunState) -> RunState:
+    """Mark a run cancelled. Does not persist."""
+    state.finish("cancelled")
+    return state
 
 
 def load_run(runs_dir: Path, run_id: str) -> RunState:
