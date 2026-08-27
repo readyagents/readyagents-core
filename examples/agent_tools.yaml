@@ -1,0 +1,19 @@
+name: agent_tools
+version: "1"
+description: >
+  Agent node with an explicit builtin-tool allowlist (`calc`).
+  Live run needs an API key. Dry-run walks without keys:
+  readyagents run examples/agent_tools.yaml --dry-run
+
+start: worker
+nodes:
+  - id: worker
+    type: agent
+    prompt: |
+      Use the calc tool if you need arithmetic.
+      What is 2+2? Reply with the number only.
+    tools:
+      - calc
+    max_tool_rounds: 4
+    output_key: answer
+    timeout_seconds: 60

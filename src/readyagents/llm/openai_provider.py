@@ -6,6 +6,11 @@ from typing import Any
 
 from readyagents.errors import LLMError
 from readyagents.llm.base import CompletionResult, Message
+from readyagents.llm.tool_calls import (
+    messages_to_openai,
+    openai_tools_payload,
+    tool_calls_from_openai_message,
+)
 
 
 class OpenAIProvider:
@@ -36,10 +41,11 @@ class OpenAIProvider:
             client = OpenAI(**client_kwargs)
             payload: dict[str, Any] = {
                 "model": model,
-                "messages": [{"role": m.role, "content": m.content} for m in messages],
+                "messages": messages_to_openai(messages),
             }
-            if tools:
-                payload["tools"] = tools
+            openai_tools = openai_tools_payload(tools)
+            if openai_tools:
+                payload["tools"] = openai_tools
             payload.update({k: v for k, v in kwargs.items() if v is not None})
             response = client.chat.completions.create(**payload)
             choice = response.choices[0]
@@ -51,7 +57,13 @@ class OpenAIProvider:
                     "completion_tokens": response.usage.completion_tokens,
                     "total_tokens": response.usage.total_tokens,
                 }
-            return CompletionResult(text=text, model=model, raw=response, usage=usage)
+            return CompletionResult(
+                text=text,
+                model=model,
+                raw=response,
+                usage=usage,
+                tool_calls=tool_calls_from_openai_message(choice.message),
+            )
         except LLMError:
             raise
         except Exception as exc:  # noqa: BLE001

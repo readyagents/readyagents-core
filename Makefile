@@ -28,6 +28,7 @@ smoke:
 	readyagents run examples/composed_gate.yaml --approve gate --no-persist
 	readyagents run examples/multi_gate.yaml --approve first --approve second --no-persist
 	readyagents run examples/support_triage.yaml --dry-run --no-persist --input message=hello
+	readyagents run examples/agent_tools.yaml --dry-run --no-persist
 	@rm -rf .readyagents-smoke
 	@set -e; \
 	  export READYAGENTS_HOME=.readyagents-smoke; \

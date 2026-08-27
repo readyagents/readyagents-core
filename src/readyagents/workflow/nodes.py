@@ -23,7 +23,7 @@ from readyagents.errors import (
     ToolError,
     WorkflowError,
 )
-from readyagents.llm.base import CompletionResult, LLMProvider, Message
+from readyagents.llm.base import CompletionResult, LLMProvider, Message, ToolCall
 from readyagents.llm.cache import LLMCache
 from readyagents.llm.registry import get_provider
 from readyagents.llm.resilience import (
@@ -34,6 +34,7 @@ from readyagents.llm.resilience import (
     raise_exhausted,
     usage_nonzero,
 )
+from readyagents.llm.tool_calls import spec_from_tool
 from readyagents.logging import get_logger, log_event
 from readyagents.tools import ToolRegistry
 from readyagents.workflow.schema import NodeSpec, NodeType, WorkflowSpec
@@ -55,6 +56,8 @@ _MAX_INCLUDE_DEPTH = 8
 _MAX_PARALLEL = 8
 # Dry-run still walks the graph; these tools must not hit the network or disk.
 _DRY_RUN_STUB_TOOLS = frozenset({"http_get", "write_file"})
+_DEFAULT_MAX_TOOL_ROUNDS = 8
+_HARD_MAX_TOOL_ROUNDS = 20
 
 
 class ExecutionContext:
@@ -179,19 +182,120 @@ def _run_agent(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     ns = state.mapping()
     prompt = interpolate(node.prompt or "", ns)
     system = interpolate(node.system, ns) if node.system else None
+    allowlist = list(node.tools or [])
+    tool_specs = _resolve_agent_tool_specs(node, ctx, allowlist) if allowlist else None
     if ctx.dry_run:
         preview = prompt if not system else f"[system]\n{system}\n[user]\n{prompt}"
+        tools_line = f" tools={','.join(allowlist)}" if allowlist else ""
         estimated = _estimate_tokens(prompt, system or "")
         _account_usage(state, ctx, {"estimated_tokens": estimated})
-        return f"[dry-run]\n{preview}\n[estimated_tokens={estimated}]"
+        return f"[dry-run]{tools_line}\n{preview}\n[estimated_tokens={estimated}]"
     messages: list[Message] = []
     if system:
         messages.append(Message(role="system", content=system))
     messages.append(Message(role="user", content=prompt))
-    result = _complete_agent(node, state, ctx, messages)
+    result = _complete_agent(node, state, ctx, messages, tools=tool_specs)
+    if tool_specs:
+        result = _agent_tool_loop(node, state, ctx, messages, result, allowlist, tool_specs)
     if node.output_schema:
         return validate_structured_output(result.text, node.output_schema, node_id=node.id)
     return result.text
+
+
+def _resolve_agent_tool_specs(
+    node: NodeSpec, ctx: ExecutionContext, allowlist: list[str]
+) -> list[dict[str, Any]]:
+    specs: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for name in allowlist:
+        try:
+            tool = ctx.tools.get(name)
+        except ToolError:
+            missing.append(name)
+            continue
+        specs.append(spec_from_tool(tool))
+    if missing:
+        known = ", ".join(ctx.tools.names()) or "(none)"
+        raise NodeError(
+            node.id,
+            f"unknown tool(s): {', '.join(missing)}. Available: {known}",
+        )
+    return specs
+
+
+def _tool_round_cap(node: NodeSpec) -> int:
+    raw = node.max_tool_rounds if node.max_tool_rounds is not None else _DEFAULT_MAX_TOOL_ROUNDS
+    return max(1, min(int(raw), _HARD_MAX_TOOL_ROUNDS))
+
+
+def _tool_result_content(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except TypeError:
+        return str(value)
+
+
+def _invoke_agent_tool(node: NodeSpec, ctx: ExecutionContext, call: ToolCall) -> Any:
+    name = call.name
+    args = call.arguments if isinstance(call.arguments, dict) else {}
+    if ctx.dry_run and name in _DRY_RUN_STUB_TOOLS:
+        return f"[dry-run] {name} {args}"
+    tool = ctx.tools.get(name)
+    return tool.run(**args)
+
+
+def _agent_tool_loop(
+    node: NodeSpec,
+    state: RunState,
+    ctx: ExecutionContext,
+    messages: list[Message],
+    result: CompletionResult,
+    allowlist: list[str],
+    tool_specs: list[dict[str, Any]],
+) -> CompletionResult:
+    allowed = set(allowlist)
+    cap = _tool_round_cap(node)
+    rounds = 0
+    while result.tool_calls:
+        rounds += 1
+        if rounds > cap:
+            raise NodeError(node.id, f"tool-use exceeded max_tool_rounds={cap}")
+        for call in result.tool_calls:
+            if call.name not in allowed:
+                raise NodeError(
+                    node.id,
+                    f"model requested tool '{call.name}' which is not on the allowlist",
+                )
+        messages.append(
+            Message(
+                role="assistant",
+                content=result.text or "",
+                tool_calls=list(result.tool_calls),
+            )
+        )
+        for call in result.tool_calls:
+            log_event(
+                log,
+                "agent_tool_call",
+                "agent tool %s",
+                call.name,
+                run_id=state.run_id,
+                node_id=node.id,
+                tool=call.name,
+            )
+            output = _invoke_agent_tool(node, ctx, call)
+            messages.append(
+                Message(
+                    role="tool",
+                    content=_tool_result_content(output),
+                    tool_call_id=call.id,
+                    name=call.name,
+                )
+            )
+        result = _complete_agent(node, state, ctx, messages, tools=tool_specs)
+    return result
 
 
 def _account_usage(state: RunState, ctx: ExecutionContext, usage: Mapping[str, Any]) -> None:
@@ -207,6 +311,7 @@ def _complete_agent(
     state: RunState,
     ctx: ExecutionContext,
     messages: list[Message],
+    tools: list[dict[str, Any]] | None = None,
 ) -> CompletionResult:
     explicit = bool(node.model)
     primary = node.model or ctx.default_model
@@ -233,7 +338,7 @@ def _complete_agent(
             continue
         cache_hit = None
         if use_cache and ctx.llm_cache is not None:
-            cache_key = ctx.llm_cache.key(ref, messages)
+            cache_key = ctx.llm_cache.key(ref, messages, tools=tools)
             cache_hit = ctx.llm_cache.get(cache_key)
             if cache_hit is not None:
                 _account_usage(state, ctx, {"cache_hits": 1})
@@ -263,7 +368,7 @@ def _complete_agent(
                     secrets=ctx.secrets,
                 )
             tried.append(ref)
-            result = provider.complete(messages, model=model_id)
+            result = provider.complete(messages, model=model_id, tools=tools)
         except LLMError as exc:
             last_error = exc
             if breaker is not None:
@@ -285,7 +390,7 @@ def _complete_agent(
         if usage_nonzero(usage):
             _account_usage(state, ctx, usage)
         if use_cache and ctx.llm_cache is not None:
-            ctx.llm_cache.put(ctx.llm_cache.key(ref, messages), result)
+            ctx.llm_cache.put(ctx.llm_cache.key(ref, messages, tools=tools), result)
         if tried and tried[0] != ref:
             log_event(
                 log,

@@ -12,7 +12,7 @@ Package `readyagents` **0.4.0**. Packaging is PyPI-ready (sdist + wheel); this r
 ## What it does
 
 - Define agent workflows as YAML or JSON (nodes + edges)
-- Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, and **include** nodes
+- Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, and **include** nodes. Agent nodes may declare a `tools:` allowlist for a bounded tool-use loop.
 - Persist after every node and **resume** a paused or failed run from the last successful node
 - Inspect past runs: `readyagents runs list` / `show` / `replay` / `report` (local HTML)
 - Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`)
@@ -123,6 +123,7 @@ flowchart LR
 | `examples/research_brief.yaml` | Agent node (needs a key) |
 | `examples/support_triage.yaml` | Classify then branch (needs a key) |
 | `examples/code_review.yaml` | `read_file` + review (needs a key) |
+| `examples/agent_tools.yaml` | Agent `tools: [calc]` (needs a key; `--dry-run` is keyless) |
 
 ## Docs
 

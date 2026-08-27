@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from readyagents.llm.base import CompletionResult, Message
+from readyagents.llm.tool_calls import tool_calls_from_json, tool_calls_to_json
 
 
 class LLMCache:
@@ -20,12 +21,18 @@ class LLMCache:
         self.hits = 0
         self.misses = 0
 
-    def key(self, model: str, messages: list[Message]) -> str:
+    def key(
+        self,
+        model: str,
+        messages: list[Message],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> str:
         payload = {
             "model": model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": [_message_payload(m) for m in messages],
+            "tools": list(tools or []),
         }
-        blob = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
         return hashlib.sha256(blob).hexdigest()
 
     def get(self, key: str) -> CompletionResult | None:
@@ -47,6 +54,7 @@ class LLMCache:
             text=str(data.get("text") or ""),
             model=str(data.get("model") or ""),
             usage=dict(usage),
+            tool_calls=tool_calls_from_json(data.get("tool_calls")),
         )
 
     def put(self, key: str, result: CompletionResult) -> None:
@@ -57,6 +65,7 @@ class LLMCache:
             "text": result.text,
             "model": result.model,
             "usage": dict(result.usage or {}),
+            "tool_calls": tool_calls_to_json(result.tool_calls),
         }
         try:
             tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -64,3 +73,14 @@ class LLMCache:
         finally:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
+
+
+def _message_payload(message: Message) -> dict[str, Any]:
+    row: dict[str, Any] = {"role": message.role, "content": message.content}
+    if message.tool_call_id:
+        row["tool_call_id"] = message.tool_call_id
+    if message.name:
+        row["name"] = message.name
+    if message.tool_calls:
+        row["tool_calls"] = tool_calls_to_json(message.tool_calls)
+    return row

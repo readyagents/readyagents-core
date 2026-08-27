@@ -95,6 +95,8 @@ class NodeSpec(BaseModel):
     fallback_models: list[str] = Field(default_factory=list)
     output_schema: dict[str, Any] | None = None
     cache: bool | None = None
+    tools: list[str] = Field(default_factory=list)
+    max_tool_rounds: int | None = Field(default=None, ge=1, le=20)
 
     @field_validator("id")
     @classmethod
@@ -111,9 +113,29 @@ class NodeSpec(BaseModel):
             raise ValueError(f"Invalid node type '{value}'")
         return cleaned
 
+    @field_validator("tools")
+    @classmethod
+    def _tools_tokens(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            name = str(raw).strip()
+            if not name:
+                raise ValueError("tool names must be non-empty")
+            token = name.replace("_", "").replace("-", "").replace(".", "")
+            if not token.isalnum():
+                raise ValueError(f"Invalid tool name '{name}' (use letters, numbers, _, -, .)")
+            if name in seen:
+                raise ValueError(f"Duplicate tool name '{name}'")
+            seen.add(name)
+            cleaned.append(name)
+        return cleaned
+
     @model_validator(mode="after")
     def _type_fields(self) -> NodeSpec:
         t = self.type
+        if t != NodeType.agent.value and self.tools:
+            raise ValueError(f"Node '{self.id}': 'tools' is only valid on agent nodes")
         if t == NodeType.agent.value and not self.prompt:
             raise ValueError(f"Node '{self.id}': agent nodes require 'prompt'")
         if t == NodeType.tool.value and not self.tool:

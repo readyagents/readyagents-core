@@ -8,6 +8,7 @@ from typing import Any
 
 from readyagents.errors import LLMError
 from readyagents.llm.base import CompletionResult, Message
+from readyagents.llm.tool_calls import tool_calls_from_json, tool_calls_to_json
 
 
 class RecordedLLM:
@@ -45,6 +46,7 @@ class RecordedLLM:
                 text=str(row.get("text") or ""),
                 model=str(row.get("model") or model),
                 usage=dict(usage),
+                tool_calls=tool_calls_from_json(row.get("tool_calls")),
             )
         if self.inner is None:
             raise LLMError(
@@ -53,7 +55,12 @@ class RecordedLLM:
             )
         result = self.inner.complete(messages, model=model, tools=tools, **kwargs)
         self._tape.append(
-            {"text": result.text, "model": result.model or model, "usage": dict(result.usage or {})}
+            {
+                "text": result.text,
+                "model": result.model or model,
+                "usage": dict(result.usage or {}),
+                "tool_calls": tool_calls_to_json(result.tool_calls),
+            }
         )
         self._index += 1
         self.cassette.parent.mkdir(parents=True, exist_ok=True)

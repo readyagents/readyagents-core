@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 from readyagents.errors import LLMError
-from readyagents.llm.base import CompletionResult, Message
+from readyagents.llm.base import CompletionResult, Message, ToolCall
 from readyagents.tools import ToolRegistry
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
@@ -33,12 +33,18 @@ class ScriptedLLM:
         model: str | None = None,
         usage: Mapping[str, Any] | None = None,
         error: BaseException | None = None,
+        tool_calls: Sequence[ToolCall] | None = None,
     ) -> ScriptedLLM:
         item: CompletionResult | BaseException
         if error is not None:
             item = error
         else:
-            item = CompletionResult(text=text, model=model or "scripted", usage=dict(usage or {}))
+            item = CompletionResult(
+                text=text,
+                model=model or "scripted",
+                usage=dict(usage or {}),
+                tool_calls=list(tool_calls or []),
+            )
         if model:
             self._by_model.setdefault(model, []).append(item)
         else:

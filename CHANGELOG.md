@@ -4,6 +4,14 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+### Added
+
+- **Bounded agent tool-use loop.** Agent nodes may set `tools: [calc, …]` (an allowlist of registry/MCP names) and optional `max_tool_rounds` (default 8, hard max 20). The engine passes tool specs into `complete(..., tools=)`, runs **real** registry tools, and uses the **final** model text as the node output. Omit `tools` for a one-shot complete (0.4.0). Unknown YAML names fail before any LLM call; a model request off the allowlist is not executed. `--dry-run` still skips the LLM and does not run `write_file` / `http_get`. Example: `examples/agent_tools.yaml`.
+
+### Safety
+
+- Core still has no always-on listener, scheduler, hosted control plane, extra database, or billing.
+
 ## 0.4.0 — 2026-08-26
 
 ### Docs

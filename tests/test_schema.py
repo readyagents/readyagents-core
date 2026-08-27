@@ -44,9 +44,7 @@ def test_duplicate_ids_rejected() -> None:
 
 def test_agent_requires_prompt() -> None:
     with pytest.raises(ValidationError):
-        WorkflowSpec.model_validate(
-            {"name": "x", "nodes": [{"id": "a", "type": "agent"}]}
-        )
+        WorkflowSpec.model_validate({"name": "x", "nodes": [{"id": "a", "type": "agent"}]})
 
 
 def test_unknown_next_rejected() -> None:
@@ -118,9 +116,91 @@ def test_example_workflows_validate(examples_dir: Path) -> None:
         "include_demo.yaml",
         "included_min.yaml",
         "composed_gate.yaml",
+        "agent_tools.yaml",
     ):
         spec = load_workflow(examples_dir / name)
         assert spec.nodes
+
+
+def test_agent_tools_allowlist_and_cap() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "worker",
+            "nodes": [
+                {
+                    "id": "worker",
+                    "type": "agent",
+                    "prompt": "Use calc if needed. What is 2+2?",
+                    "tools": ["calc"],
+                    "max_tool_rounds": 4,
+                }
+            ],
+        }
+    )
+    assert spec.nodes[0].tools == ["calc"]
+    assert spec.nodes[0].max_tool_rounds == 4
+
+
+def test_agent_without_tools_is_one_shot_schema() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "plain",
+            "nodes": [{"id": "a", "type": "agent", "prompt": "hello"}],
+        }
+    )
+    assert spec.nodes[0].tools == []
+    assert spec.nodes[0].max_tool_rounds is None
+
+
+def test_non_agent_tools_rejected() -> None:
+    with pytest.raises(ValidationError, match="tools"):
+        WorkflowSpec.model_validate(
+            {
+                "name": "bad",
+                "nodes": [
+                    {
+                        "id": "t",
+                        "type": "transform",
+                        "template": "x",
+                        "tools": ["calc"],
+                    }
+                ],
+            }
+        )
+
+
+def test_duplicate_agent_tools_rejected() -> None:
+    with pytest.raises(ValidationError, match="Duplicate"):
+        WorkflowSpec.model_validate(
+            {
+                "name": "dup",
+                "nodes": [
+                    {
+                        "id": "a",
+                        "type": "agent",
+                        "prompt": "hi",
+                        "tools": ["calc", "calc"],
+                    }
+                ],
+            }
+        )
+
+
+def test_mcp_style_tool_name_allowed() -> None:
+    spec = WorkflowSpec.model_validate(
+        {
+            "name": "mcp",
+            "nodes": [
+                {
+                    "id": "a",
+                    "type": "agent",
+                    "prompt": "list",
+                    "tools": ["filesystem.list_directory"],
+                }
+            ],
+        }
+    )
+    assert spec.nodes[0].tools == ["filesystem.list_directory"]
 
 
 def test_cycle_rejected() -> None:

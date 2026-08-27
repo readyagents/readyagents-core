@@ -77,6 +77,19 @@ Optional agent fields:
 | `fallback_models` | Extra `provider:model` refs if this node’s primary fails |
 | `output_schema` | JSON Schema object; the LLM payload is parsed and validated with Pydantic (`StructuredOutputError` on mismatch) |
 | `cache` | `true` / `false` to override workflow/settings LLM cache for this node |
+| `tools` | Allowlist of registry tool names the agent may call (`calc`, `read_file`, MCP `server.tool`, …). Omit or `[]` for a one-shot complete (0.4.0 behavior). The model cannot call anything else. |
+| `max_tool_rounds` | Cap on tool-call rounds (default 8, max 20). Exceeding raises `NodeError`. |
+
+```yaml
+- id: worker
+  type: agent
+  prompt: Use calc if needed. What is 2+2?
+  tools: [calc]
+  max_tool_rounds: 4
+  output_key: answer
+```
+
+`--dry-run` still skips the LLM and does not execute `write_file` / `http_get` even when those names are on the allowlist.
 
 ```yaml
 - id: classify
@@ -236,3 +249,4 @@ readyagents runs replay <run_id>
 | `examples/research_brief.yaml` | Yes | Optional HTTP fetch |
 | `examples/support_triage.yaml` | Yes | JSON classify then branch |
 | `examples/code_review.yaml` | Yes | Builtin `read_file` + review |
+| `examples/agent_tools.yaml` | Yes (dry-run: no) | Agent `tools: [calc]` allowlist |

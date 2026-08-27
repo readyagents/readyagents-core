@@ -7,9 +7,21 @@ from typing import Any, Protocol
 
 
 @dataclass
+class ToolCall:
+    """One model-requested tool invocation (id + name + JSON arguments)."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Message:
     role: str
     content: str
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: str | None = None
+    name: str | None = None
 
 
 @dataclass
@@ -18,6 +30,7 @@ class CompletionResult:
     model: str
     raw: Any = None
     usage: dict[str, Any] = field(default_factory=dict)
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
 
 class LLMProvider(Protocol):
