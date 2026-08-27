@@ -4,6 +4,22 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+## 0.7.0 — 2026-08-27
+
+### Added
+
+- **Include / parallel resume snapshots.** Successful child nodes and parallel branches are stored on the parent run record; resume does not re-run them. Nested foreach stays invalid.
+- **MCP client sessions.** One stdio child per named server for the run; `inputSchema` is copied onto tools; `cwd` is confined to the workspace.
+- **Template filters** `default`, `len`, `join` and condition `and` / `or` / `not` (no Python `eval`).
+
+### Security
+
+- Pause notify (`on_pause_url`) uses the same public-IP pin as `http_get` (loopback/private/metadata refused, including after redirects). A blocked URL does not prevent the HITL pause.
+
+### Safety
+
+- Core still has no always-on listener, scheduler, hosted control plane, extra database, or billing.
+
 ## 0.6.0 — 2026-08-27
 
 ### Added

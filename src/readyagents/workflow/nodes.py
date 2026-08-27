@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -44,12 +43,6 @@ from readyagents.workflow.templates import interpolate, interpolate_value, looku
 
 log = get_logger("nodes")
 
-_COMPARE = re.compile(
-    r"^\s*(.+?)\s*(==|!=|>=|<=|>|<|contains|startswith|endswith)\s*(.+?)\s*$",
-    re.DOTALL,
-)
-
-
 _APPROVE_VALUES = {"approve", "approved", "yes", "true", "accept", "ok"}
 _REJECT_VALUES = {"reject", "rejected", "deny", "denied", "no", "false"}
 _MAX_INCLUDE_DEPTH = 8
@@ -57,6 +50,8 @@ _MAX_PARALLEL = 8
 _DEFAULT_MAX_FOREACH = 32
 _HARD_MAX_FOREACH = 100
 _FOREACH_META = "_foreach"
+_INCLUDE_META = "_include"
+_PARALLEL_META = "_parallel"
 # Dry-run still walks the graph; these tools must not hit the network or disk.
 _DRY_RUN_STUB_TOOLS = frozenset({"http_get", "write_file"})
 _DEFAULT_MAX_TOOL_ROUNDS = 8
@@ -726,11 +721,75 @@ def _run_foreach(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> list
     return outputs
 
 
+def _meta_bucket(state: RunState, key: str) -> dict[str, Any]:
+    bucket = state.metadata.get(key)
+    if not isinstance(bucket, dict):
+        bucket = {}
+        state.metadata[key] = bucket
+    return bucket
+
+
+def _include_child_state(state: RunState, node_id: str) -> RunState | None:
+    bucket = state.metadata.get(_INCLUDE_META)
+    if not isinstance(bucket, dict):
+        return None
+    entry = bucket.get(node_id)
+    if not isinstance(entry, dict):
+        return None
+    record = entry.get("run")
+    if not isinstance(record, Mapping):
+        return None
+    child = RunState.from_record(record)
+    if child.status == "succeeded":
+        return None
+    return child
+
+
+def _persist_include_child(
+    parent: RunState, node_id: str, child: RunState, ctx: ExecutionContext
+) -> None:
+    _meta_bucket(parent, _INCLUDE_META)[node_id] = {"run": child.to_record()}
+    if ctx.on_persist is not None:
+        ctx.on_persist(parent)
+
+
+def _clear_include_child(state: RunState, node_id: str) -> None:
+    bucket = state.metadata.get(_INCLUDE_META)
+    if not isinstance(bucket, dict):
+        return
+    bucket.pop(node_id, None)
+    if not bucket:
+        state.metadata.pop(_INCLUDE_META, None)
+
+
+def _parallel_prior(state: RunState, node_id: str) -> dict[str, Any]:
+    bucket = state.metadata.get(_PARALLEL_META)
+    if not isinstance(bucket, dict):
+        return {}
+    prior = bucket.get(node_id)
+    return dict(prior) if isinstance(prior, dict) else {}
+
+
+def _persist_parallel_ok(
+    state: RunState, node_id: str, collected: Mapping[str, Any], ctx: ExecutionContext
+) -> None:
+    _meta_bucket(state, _PARALLEL_META)[node_id] = dict(collected)
+    if ctx.on_persist is not None:
+        ctx.on_persist(state)
+
+
 def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dict[str, Any]:
     branches = list(node.branches or [])
     if not branches:
         raise NodeError(node.id, "parallel nodes require 'branches'")
+    prior = _parallel_prior(state, node.id)
     collected: dict[str, Any] = {}
+    remaining: list[NodeSpec] = []
+    for branch in branches:
+        if branch.id in prior:
+            collected[branch.id] = prior[branch.id]
+        else:
+            remaining.append(branch)
 
     def _one(branch: NodeSpec) -> tuple[str, Any]:
         try:
@@ -747,12 +806,23 @@ def _run_parallel(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> dic
                 cause=exc if isinstance(exc, BaseException) else None,
             ) from exc
 
-    workers = max(1, min(_MAX_PARALLEL, len(branches)))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_one, branch) for branch in branches]
-        for fut in as_completed(futures):
-            branch_id, output = fut.result()
-            collected[branch_id] = output
+    first_error: BaseException | None = None
+    if remaining:
+        workers = max(1, min(_MAX_PARALLEL, len(remaining)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_one, branch) for branch in remaining]
+            for fut in as_completed(futures):
+                try:
+                    branch_id, output = fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    if first_error is None:
+                        first_error = exc
+                    continue
+                collected[branch_id] = output
+    if first_error is not None:
+        _persist_parallel_ok(state, node.id, collected, ctx)
+        raise first_error
+    _persist_parallel_ok(state, node.id, collected, ctx)
     ordered = {branch.id: collected[branch.id] for branch in branches}
     # Branch execute_node calls accumulate on state._last_node_usage (thread-safe).
     # The engine's take_node_usage then stores the merged total on this node.
@@ -785,18 +855,24 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
     if not isinstance(nested_in, dict):
         raise NodeError(node.id, "include inputs must be a mapping")
     merged = merge_inputs(spec, nested_in)
+
+    def _persist_child(child_state: RunState) -> None:
+        _persist_include_child(state, node.id, child_state, ctx)
+
     nested_ctx = ctx.child(
         spec,
         workflow_dir=candidate.parent,
         include_depth=ctx.include_depth + 1,
-        on_persist=None,
+        on_persist=_persist_child,
     )
+    nested_state = _include_child_state(state, node.id)
     try:
         nested = run_workflow(
             spec,
             merged,
             nested_ctx,
             metadata={"source": str(candidate), "included_by": node.id},
+            state=nested_state,
         )
     except ApprovalRequired as exc:
         # Parent run is what was persisted. Keep the child's node id so
@@ -816,6 +892,7 @@ def _run_include(node: NodeSpec, state: RunState, ctx: ExecutionContext) -> Any:
         )
     if nested.status != "succeeded":
         raise NodeError(node.id, f"included workflow '{spec.name}' {nested.status}")
+    _clear_include_child(state, node.id)
     # Nested agents already add_usage onto ctx.usage_state (the parent run).
     # Record nested totals on this include node without rolling them up again.
     already_on_parent = ctx.usage_state is state
@@ -843,92 +920,7 @@ def _confine_include_path(raw_path: str, workflow_dir: Path, node_id: str) -> Pa
 
 
 def evaluate_condition(expr: str, mapping: Mapping[str, Any]) -> bool:
-    """Evaluate a small comparison or a truthy interpolated value. No `eval()`."""
-    expr = expr.strip()
-    if not expr:
-        return False
-    match = _COMPARE.match(expr)
-    if match:
-        left_raw, op, right_raw = match.group(1), match.group(2), match.group(3)
-        left = _atom(left_raw, mapping)
-        right = _atom(right_raw, mapping)
-        return _compare(left, op, right)
-    interpolated = interpolate(expr, mapping) if "{{" in expr else expr
-    try:
-        value = (
-            lookup(mapping, interpolated)
-            if interpolated.isidentifier() or "." in interpolated
-            else interpolated
-        )
-    except TemplateError:
-        value = interpolated
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "yes", "1"}:
-            return True
-        if lowered in {"false", "no", "0", ""}:
-            return False
-    return bool(value)
+    """Evaluate a small boolean of comparisons / truthy paths. No `eval()`."""
+    from readyagents.workflow.conditions import evaluate_condition as eval_bool
 
-
-def _atom(raw: str, mapping: Mapping[str, Any]) -> Any:
-    text = raw.strip()
-    quoted = (text.startswith('"') and text.endswith('"')) or (
-        text.startswith("'") and text.endswith("'")
-    )
-    if quoted:
-        return interpolate(text[1:-1], mapping)
-    if "{{" in text:
-        return interpolate(text, mapping)
-    lowered = text.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if lowered in {"null", "none"}:
-        return None
-    try:
-        if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
-            return int(text)
-        return float(text)
-    except ValueError:
-        pass
-    try:
-        return lookup(mapping, text)
-    except TemplateError:
-        return interpolate(text, mapping) if "{{" in text else text
-
-
-def _compare(left: Any, op: str, right: Any) -> bool:
-    if op == "==":
-        return _norm(left) == _norm(right)
-    if op == "!=":
-        return _norm(left) != _norm(right)
-    if op in {">", "<", ">=", "<="}:
-        try:
-            lf, rf = float(left), float(right)
-        except (TypeError, ValueError):
-            lf, rf = str(left), str(right)
-        if op == ">":
-            return lf > rf
-        if op == "<":
-            return lf < rf
-        if op == ">=":
-            return lf >= rf
-        return lf <= rf
-    left_s, right_s = str(left), str(right)
-    if op == "contains":
-        return right_s in left_s
-    if op == "startswith":
-        return left_s.startswith(right_s)
-    if op == "endswith":
-        return left_s.endswith(right_s)
-    return False
-
-
-def _norm(value: Any) -> Any:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip()
-    return value
+    return eval_bool(expr, mapping)

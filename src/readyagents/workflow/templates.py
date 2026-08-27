@@ -9,7 +9,12 @@ from typing import Any
 
 from readyagents.errors import TemplateError
 
-_VAR = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_\.]*)\s*\}\}")
+_VAR = re.compile(
+    r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_\.]*)"
+    r"(?:\s*\|\s*(default|len|join)(?:\s+([^}]+?))?)?"
+    r"\s*\}\}"
+)
+_FILTERS = frozenset({"default", "len", "join"})
 
 
 def resolve_path(data: Any, path: str) -> Any:
@@ -51,14 +56,50 @@ def lookup(mapping: Mapping[str, Any], path: str) -> Any:
 
 
 def interpolate(template: str, mapping: Mapping[str, Any]) -> str:
-    """Replace `{{var}}` tokens. Missing names raise TemplateError."""
+    """Replace `{{var}}` tokens. Missing names raise TemplateError unless `| default`."""
 
     def repl(match: re.Match[str]) -> str:
         path = match.group(1)
-        value = lookup(mapping, path)
+        filt = match.group(2)
+        arg = (match.group(3) or "").strip()
+        try:
+            value = lookup(mapping, path)
+        except TemplateError:
+            if filt == "default":
+                return _unquote(arg)
+            raise
+        if filt:
+            value = _apply_filter(filt, value, arg)
         return _stringify(value)
 
     return _VAR.sub(repl, template)
+
+
+def _unquote(text: str) -> str:
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1]
+    return text
+
+
+def _apply_filter(name: str, value: Any, arg: str) -> Any:
+    if name == "default":
+        if value is None or value == "":
+            return _unquote(arg)
+        return value
+    if name == "len":
+        try:
+            return len(value)
+        except TypeError as exc:
+            raise TemplateError("filter len requires a sized value") from exc
+    if name == "join":
+        sep = _unquote(arg) if arg else ""
+        if isinstance(value, str):
+            return sep.join(value)
+        try:
+            return sep.join(_stringify(item) for item in value)
+        except TypeError as exc:
+            raise TemplateError("filter join requires an iterable") from exc
+    raise TemplateError(f"unknown filter '{name}'")
 
 
 def interpolate_value(value: Any, mapping: Mapping[str, Any]) -> Any:

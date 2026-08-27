@@ -20,8 +20,18 @@ def test_parallel_runs_independent_tools() -> None:
                     "output_key": "parts",
                     "next": "join",
                     "branches": [
-                        {"id": "a", "type": "tool", "tool": "calc", "arguments": {"expression": "2+2"}},
-                        {"id": "b", "type": "tool", "tool": "calc", "arguments": {"expression": "5*5"}},
+                        {
+                            "id": "a",
+                            "type": "tool",
+                            "tool": "calc",
+                            "arguments": {"expression": "2+2"},
+                        },
+                        {
+                            "id": "b",
+                            "type": "tool",
+                            "tool": "calc",
+                            "arguments": {"expression": "5*5"},
+                        },
                     ],
                 },
                 {
@@ -75,9 +85,7 @@ def test_parallel_requires_branches() -> None:
     from pydantic import ValidationError
 
     try:
-        WorkflowSpec.model_validate(
-            {"name": "x", "nodes": [{"id": "p", "type": "parallel"}]}
-        )
+        WorkflowSpec.model_validate({"name": "x", "nodes": [{"id": "p", "type": "parallel"}]})
         raise AssertionError("expected validation error")
     except ValidationError:
         pass
@@ -109,6 +117,7 @@ def test_parallel_approval_in_branch_pauses() -> None:
         raise AssertionError("expected pause")
     except ApprovalRequired as exc:
         assert exc.node_id == "g"
+
 
 def test_parallel_branch_timeout() -> None:
     import time
@@ -194,9 +203,7 @@ def test_parallel_branch_timeout_does_not_wait_handler() -> None:
     import time
 
     tools = ToolRegistry()
-    tools.register(
-        FunctionTool(name="slow", description="x", handler=lambda: time.sleep(2) or "x")
-    )
+    tools.register(FunctionTool(name="slow", description="x", handler=lambda: time.sleep(2) or "x"))
     spec = WorkflowSpec.model_validate(
         {
             "name": "pbudget",
@@ -226,4 +233,3 @@ def test_parallel_branch_timeout_does_not_wait_handler() -> None:
         assert elapsed < 1.0, elapsed
         assert str(exc).count("timed out") == 1
         assert str(exc).count("Node 'slow':") == 1
-

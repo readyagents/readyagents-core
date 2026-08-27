@@ -37,6 +37,8 @@ nodes:
       path: "."
 ```
 
+Each named server keeps **one stdio session** for the run (`list_tools` and `call_tool` reuse it). Tool JSON Schema from the server is passed through to agent `tools:`. `cwd` defaults to the workflow workspace and cannot escape it.
+
 If the workflow declares `mcp_servers` but `mcp` is not installed, you get a clear `MCPError` with the pip extra to install.
 
 Core examples do **not** require MCP servers.

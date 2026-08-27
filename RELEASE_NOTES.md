@@ -1,3 +1,45 @@
+# ReadyAgents Core 0.7.0
+
+**Honest composition resume and a real MCP client. Still local. No always-on.**
+
+0.7.0 is the engine cut after 0.6.0. Install from a clone (`pip install -e .`). This package is not on PyPI.
+
+## Why this release matters
+
+1. **Resume does not re-run paid work** inside `include` or `parallel` (same idea as 0.6 foreach snapshots).
+2. **MCP tools share one stdio session** per named server; schemas reach agent `tools:`; `cwd` cannot leave the workspace.
+3. **Pause webhooks cannot hit loopback/private/metadata** — same pin as `http_get`. HITL still pauses if notify fails.
+4. **YAML glue:** `{{x | default}}`, `{{list | len}}`, `{{list | join}}`, and `when: a == 1 and b == 2` with no Python `eval`.
+
+## Try it (no API keys)
+
+```bash
+pip install -e .
+readyagents run examples/calc_pipeline.yaml
+readyagents run examples/foreach_calc.yaml
+readyagents run examples/composed_gate.yaml --approve gate
+```
+
+## What we deliberately left out of core
+
+- Nested foreach, unbounded map, `http_request` POST, inbound listeners
+- Hosted control plane, extra databases, billing, always-on workers
+
+## Compatibility
+
+- Python 3.11+
+- Existing 0.6.0 workflow YAML still runs. Filters, `and`/`or`, and MCP session behavior are additive.
+- CLI exit code **2** is still “paused for approval”.
+
+## Docs
+
+- [README](README.md)
+- [Changelog](CHANGELOG.md)
+- [Workflows](docs/workflows.md)
+- [MCP](docs/mcp.md)
+
+---
+
 # ReadyAgents Core 0.6.0
 
 **List-shaped local YAML, inspectable tool-use, operable run store. No always-on.**

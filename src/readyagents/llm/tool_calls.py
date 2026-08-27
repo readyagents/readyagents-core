@@ -29,13 +29,15 @@ def parse_json_arguments(raw: Any) -> dict[str, Any]:
 
 
 def spec_from_tool(tool: Any) -> dict[str, Any]:
-    schema = getattr(tool, "schema", None) or {"type": "object", "properties": {}}
+    raw = getattr(tool, "schema", None)
+    if isinstance(raw, dict) and raw:
+        schema = dict(raw)
+    else:
+        schema = {"type": "object", "properties": {}}
     return {
         "name": str(getattr(tool, "name", "")),
         "description": str(getattr(tool, "description", "") or ""),
-        "schema": dict(schema)
-        if isinstance(schema, dict)
-        else {"type": "object", "properties": {}},
+        "schema": schema,
     }
 
 

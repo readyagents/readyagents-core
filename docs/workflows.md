@@ -39,7 +39,7 @@ readyagents run hello.yaml --input name=Ada
 | `budget` | `{max_tokens, max_cost_usd}` — further LLM calls raise `BudgetExceeded` |
 | `fallback_models` | Model refs tried after the primary LLM fails |
 | `circuit` | `{failure_threshold, cooldown_seconds}` process-local breaker |
-| `on_pause_url` | Outbound webhook URL when an approval node pauses |
+| `on_pause_url` | Outbound webhook URL when an approval node pauses (same public-IP pin as `http_get`; failures do not abort the pause) |
 | `cache_llm` | Opt in to the local LLM cache for this workflow |
 | `redact` | Opt in to PII redaction for this workflow |
 
@@ -68,7 +68,7 @@ If `next` and `edges` are omitted, the engine uses **list order** (the following
   output_key: haiku
 ```
 
-Missing `{{variables}}` fail with `TemplateError`.
+Missing `{{variables}}` fail with `TemplateError` unless you use `| default`. Closed filters: `default`, `len`, `join` (e.g. `{{results | len}}`, `{{results | join ", "}}`).
 
 Optional agent fields:
 
@@ -131,6 +131,7 @@ Supported expressions (no Python `eval`):
 
 - dotted path truthiness: `allow_http`
 - comparisons: `== != > < >= <= contains startswith endswith`
+- `and` / `or` / `not` and parentheses: `a == 1 and b == 2`
 - quoted strings, numbers, `true` / `false`
 - `{{templates}}` on either side
 
@@ -176,7 +177,7 @@ Independent branches run concurrently. Output is a mapping of branch id → resu
       tool: now
 ```
 
-Templates can use `{{parts.left}}`. Max 8 worker threads.
+Templates can use `{{parts.left}}`. Max 8 worker threads. Resume skips branches that already returned ok.
 
 ## Include (sub-workflow)
 
@@ -189,7 +190,7 @@ Templates can use `{{parts.left}}`. Max 8 worker threads.
   output_key: nested
 ```
 
-Includes are depth-limited (8) so cycles fail with a typed error. Nested runs do not write their own run records. The `path` is resolved relative to the parent workflow file and must stay under that directory (no `..` or absolute escapes).
+Includes are depth-limited (8) so cycles fail with a typed error. Nested runs do not write their own run records; child progress is stored on the parent so resume does not re-run successful child nodes. The `path` is resolved relative to the parent workflow file and must stay under that directory (no `..` or absolute escapes).
 
 ## Foreach (sequential map)
 

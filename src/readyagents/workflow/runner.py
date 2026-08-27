@@ -172,7 +172,7 @@ def run_workflow_file(
     if workflow.mcp_servers and not dry_run:
         from readyagents.mcp.client import MCPClient
 
-        mcp = MCPClient(workflow.mcp_servers)
+        mcp = MCPClient(workflow.mcp_servers, workspace)
         tools.merge(mcp.tools())
 
     runs_dir = settings.runs_dir()

@@ -30,7 +30,9 @@ def test_include_missing_file(tmp_path: Path) -> None:
             "nodes": [{"id": "c", "type": "include", "path": "nope.yaml"}],
         }
     )
-    ctx = ExecutionContext(spec, default_registry(allow_http=False, workspace=tmp_path), workflow_dir=tmp_path)
+    ctx = ExecutionContext(
+        spec, default_registry(allow_http=False, workspace=tmp_path), workflow_dir=tmp_path
+    )
     with pytest.raises(NodeError, match="not found"):
         run_workflow(spec, {}, ctx)
 
@@ -176,9 +178,7 @@ nodes:
     nested_ok = [r for r in paused.value.state.results if r.node_id == "nested"]
     assert all(r.status != "ok" for r in nested_ok)
 
-    approved = ExecutionContext(
-        spec, tools, workflow_dir=tmp_path, decisions={"gate": "approve"}
-    )
+    approved = ExecutionContext(spec, tools, workflow_dir=tmp_path, decisions={"gate": "approve"})
     state = run_workflow(spec, {}, approved, state=paused.value.state)
     assert state.status == "succeeded"
     assert state.run_id == parent_id

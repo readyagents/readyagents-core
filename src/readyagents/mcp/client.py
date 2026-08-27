@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
+from contextlib import AsyncExitStack
+from pathlib import Path
 from typing import Any
 
 from readyagents.errors import MCPError
@@ -48,100 +51,203 @@ def mcp_available() -> bool:
         return False
 
 
-class MCPClient:
-    """Lazy stdio MCP client. Safe to construct when the extra is missing."""
+def _resolve_mcp_cwd(spec: MCPServerSpec, workspace: Path) -> Path:
+    """Use the run workspace, or confine an explicit cwd under it, before spawn."""
+    root = Path(workspace).resolve()
+    raw = (spec.cwd or "").strip()
+    if not raw:
+        return root
+    from readyagents.workflow.runner import confine_under
 
-    def __init__(self, servers: dict[str, MCPServerSpec]) -> None:
-        self._servers = servers
+    return confine_under(raw, root, what="MCP cwd")
+
+
+def _schema_from_mcp_tool(item: Any) -> dict[str, Any]:
+    raw: Any = None
+    if isinstance(item, dict):
+        raw = item.get("inputSchema", item.get("input_schema"))
+    else:
+        raw = getattr(item, "inputSchema", None)
+        if raw is None:
+            raw = getattr(item, "input_schema", None)
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def _result_text(result: Any) -> str:
+    content = getattr(result, "content", None)
+    if not content:
+        return str(result)
+    texts: list[str] = []
+    for block in content:
+        if isinstance(block, dict):
+            text = block.get("text")
+        else:
+            text = getattr(block, "text", None)
+        if text is not None:
+            texts.append(str(text))
+    return "\n".join(texts) if texts else str(result)
+
+
+class _AsyncLoop:
+    """Background asyncio loop so MCP stdio sessions outlive a single coroutine."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        self._ready = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="readyagents-mcp", daemon=True)
+        self._thread.start()
+        if not self._ready.wait(timeout=5):
+            raise MCPError("MCP event loop failed to start")
+
+    def _run(self) -> None:
+        asyncio.set_event_loop(self.loop)
+        self._ready.set()
+        self.loop.run_forever()
+        pending = asyncio.all_tasks(self.loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        self.loop.close()
+
+    def run(self, coro: Any, *, timeout: float = 60) -> Any:
+        fut = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        try:
+            return fut.result(timeout=timeout)
+        except TimeoutError:
+            fut.cancel()
+            raise MCPError("MCP operation timed out") from None
+
+    def stop(self) -> None:
+        if not self.loop.is_closed():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        self._thread.join(timeout=10)
+
+
+class MCPClient:
+    """Long-lived stdio MCP sessions, one child per ``mcp_servers`` name."""
+
+    def __init__(self, servers: dict[str, MCPServerSpec], workspace: Path) -> None:
+        self._servers = dict(servers)
+        self._workspace = Path(workspace)
+        # Confine every declared cwd before any subprocess is spawned.
+        self._cwds = {
+            name: _resolve_mcp_cwd(spec, self._workspace) for name, spec in self._servers.items()
+        }
         self._tools: dict[str, Tool] | None = None
+        self._sessions: dict[str, Any] = {}
+        self._stack: AsyncExitStack | None = None
+        self._loop: _AsyncLoop | None = None
+        self._lock = threading.Lock()
 
     def tools(self) -> dict[str, Tool]:
         if not self._servers:
             return {}
-        if self._tools is None:
-            self._tools = _load_tools_sync(self._servers)
-        return self._tools
+        with self._lock:
+            if self._tools is None:
+                self._tools = self._connect_locked()
+            return self._tools
 
     def close(self) -> None:
+        with self._lock:
+            self._shutdown_locked()
+
+    def _connect_locked(self) -> dict[str, Tool]:
+        if not mcp_available():
+            names = ", ".join(self._servers)
+            raise MCPError(
+                f"Workflow declares MCP servers ({names}) but the mcp extra is not installed. "
+                "Run: pip install 'readyagents[mcp]'"
+            )
+        self._loop = _AsyncLoop()
+        try:
+            return self._loop.run(self._connect())
+        except BaseException:
+            self._shutdown_locked()
+            raise
+
+    def _shutdown_locked(self) -> None:
+        loop = self._loop
+        if loop is not None:
+            try:
+                if self._stack is not None:
+                    loop.run(self._stack.aclose(), timeout=15)
+            except Exception:  # noqa: BLE001
+                pass
+            loop.stop()
+        self._loop = None
+        self._stack = None
+        self._sessions.clear()
         self._tools = None
 
+    async def _connect(self) -> dict[str, Tool]:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
 
-def _load_tools_sync(servers: dict[str, MCPServerSpec]) -> dict[str, Tool]:
-    if not mcp_available():
-        names = ", ".join(servers)
-        raise MCPError(
-            f"Workflow declares MCP servers ({names}) but the mcp extra is not installed. "
-            "Run: pip install 'readyagents[mcp]'"
-        )
-    return asyncio.run(_load_tools(servers))
-
-
-async def _load_tools(servers: dict[str, MCPServerSpec]) -> dict[str, Tool]:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
-
-    tools: dict[str, Tool] = {}
-    for name, spec in servers.items():
-        params = StdioServerParameters(
-            command=spec.command,
-            args=spec.args,
-            env=mcp_child_env(spec),
-            cwd=spec.cwd,
-        )
+        stack = AsyncExitStack()
+        tools: dict[str, Tool] = {}
         try:
-            async with stdio_client(params) as (read, write):
-                async with ClientSession(read, write) as session:
+            for name, spec in self._servers.items():
+                params = StdioServerParameters(
+                    command=spec.command,
+                    args=spec.args,
+                    env=mcp_child_env(spec),
+                    cwd=str(self._cwds[name]),
+                )
+                try:
+                    read, write = await stack.enter_async_context(stdio_client(params))
+                    session = await stack.enter_async_context(ClientSession(read, write))
                     await session.initialize()
                     listed = await session.list_tools()
-                    for item in listed.tools:
-                        qualified = f"{name}.{item.name}"
-                        desc = item.description or ""
-                        tools[qualified] = _remote_tool(name, spec, item.name, desc)
+                except MCPError:
+                    raise
+                except Exception as exc:  # noqa: BLE001
+                    raise MCPError(f"Failed to connect to MCP server '{name}': {exc}") from exc
+                self._sessions[name] = session
+                for item in listed.tools:
+                    tool_name = item.name
+                    qualified = f"{name}.{tool_name}"
+                    desc = item.description or ""
+                    tools[qualified] = FunctionTool(
+                        name=qualified,
+                        description=desc or f"MCP tool {tool_name} from {name}",
+                        handler=self._handler(name, tool_name),
+                        schema=_schema_from_mcp_tool(item),
+                    )
+        except BaseException:
+            await stack.aclose()
+            raise
+        self._stack = stack
+        return tools
+
+    def _handler(self, server: str, tool_name: str) -> Any:
+        def handler(**kwargs: Any) -> Any:
+            return self._call(server, tool_name, kwargs)
+
+        return handler
+
+    def _call(self, server: str, tool_name: str, arguments: dict[str, Any]) -> Any:
+        with self._lock:
+            loop = self._loop
+            session = self._sessions.get(server)
+        if loop is None or session is None:
+            raise MCPError(f"MCP server '{server}' is not connected")
+        try:
+            return loop.run(self._call_on(session, tool_name, arguments))
         except MCPError:
             raise
         except Exception as exc:  # noqa: BLE001
-            raise MCPError(f"Failed to connect to MCP server '{name}': {exc}") from exc
-    return tools
+            raise MCPError(f"MCP tool '{tool_name}' failed: {exc}") from exc
 
-
-def _remote_tool(server: str, spec: MCPServerSpec, tool_name: str, description: str) -> Tool:
-    def handler(**kwargs: Any) -> Any:
-        return asyncio.run(_call_tool(spec, tool_name, kwargs))
-
-    return FunctionTool(
-        name=f"{server}.{tool_name}",
-        description=description or f"MCP tool {tool_name} from {server}",
-        handler=handler,
-    )
-
-
-async def _call_tool(spec: MCPServerSpec, tool_name: str, arguments: dict[str, Any]) -> Any:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
-
-    params = StdioServerParameters(
-        command=spec.command,
-        args=spec.args,
-        env=mcp_child_env(spec),
-        cwd=spec.cwd,
-    )
-    try:
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments)
-                if getattr(result, "isError", False):
-                    raise MCPError(f"MCP tool '{tool_name}' returned an error: {result}")
-                content = getattr(result, "content", None)
-                if not content:
-                    return str(result)
-                texts = []
-                for block in content:
-                    text = getattr(block, "text", None)
-                    if text is not None:
-                        texts.append(text)
-                return "\n".join(texts) if texts else str(result)
-    except MCPError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise MCPError(f"MCP tool '{tool_name}' failed: {exc}") from exc
+    async def _call_on(self, session: Any, tool_name: str, arguments: dict[str, Any]) -> Any:
+        try:
+            result = await session.call_tool(tool_name, arguments)
+        except MCPError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise MCPError(f"MCP tool '{tool_name}' failed: {exc}") from exc
+        if getattr(result, "isError", False) or getattr(result, "is_error", False):
+            raise MCPError(f"MCP tool '{tool_name}' returned an error: {result}")
+        return _result_text(result)

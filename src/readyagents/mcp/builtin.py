@@ -429,10 +429,21 @@ def tool_http_get(url: str, *, allow_http: bool) -> str:
 
 
 def _http_exchange(
-    scheme: str, hostname: str, ip: str, port: int, path: str
+    scheme: str,
+    hostname: str,
+    ip: str,
+    port: int,
+    path: str,
+    *,
+    method: str = "GET",
+    body: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: float | None = None,
 ) -> tuple[int, bytes, str | None]:
-    timeout = _HTTP_TIMEOUT
-    headers = {"User-Agent": f"readyagents/{__version__}"}
+    timeout = _HTTP_TIMEOUT if timeout is None else timeout
+    req_headers = {"User-Agent": f"readyagents/{__version__}"}
+    if headers:
+        req_headers.update(headers)
     if scheme == "https":
         ctx = ssl.create_default_context()
         conn: http.client.HTTPConnection = http.client.HTTPSConnection(
@@ -452,31 +463,34 @@ def _http_exchange(
 
         conn.connect = connect  # type: ignore[method-assign]
     try:
-        conn.request("GET", path, headers=headers)
+        if body is None:
+            conn.request(method, path, headers=req_headers)
+        else:
+            conn.request(method, path, body=body, headers=req_headers)
         resp = conn.getresponse()
-        body = resp.read(_MAX_HTTP_BYTES + 1)
-        return resp.status, body, resp.getheader("Location")
+        payload = resp.read(_MAX_HTTP_BYTES + 1)
+        return resp.status, payload, resp.getheader("Location")
     finally:
         conn.close()
 
 
-def _assert_public_http_url(url: object) -> ParseResult:
+def _assert_public_http_url(url: object, *, kind: str = "http_get") -> ParseResult:
     if not isinstance(url, str) or not url.strip():
-        raise ToolError("http_get: url must start with http:// or https://")
+        raise ToolError(f"{kind}: url must start with http:// or https://")
     parsed = urlparse(url.strip())
     if parsed.scheme not in {"http", "https"}:
-        raise ToolError("http_get: url must start with http:// or https://")
+        raise ToolError(f"{kind}: url must start with http:// or https://")
     if parsed.username is not None or parsed.password is not None:
-        raise ToolError("http_get: URLs with userinfo are not allowed")
+        raise ToolError(f"{kind}: URLs with userinfo are not allowed")
     if not parsed.hostname:
-        raise ToolError("http_get: URL must include a host")
+        raise ToolError(f"{kind}: URL must include a host")
     return parsed
 
 
-def _resolve_public_ips(host: str) -> list[str]:
+def _resolve_public_ips(host: str, *, kind: str = "http_get") -> list[str]:
     name = host.strip().lower().rstrip(".")
     not_allowed = (
-        f"http_get: host '{host}' is not allowed "
+        f"{kind}: host '{host}' is not allowed "
         "(loopback, private, link-local, or metadata addresses)"
     )
     if name in _BLOCKED_HOST_NAMES or name.endswith(".localhost") or name.endswith(".local"):
@@ -492,9 +506,9 @@ def _resolve_public_ips(host: str) -> list[str]:
     try:
         infos = socket.getaddrinfo(name, None, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
-        raise ToolError(f"http_get: could not resolve host '{host}'") from exc
+        raise ToolError(f"{kind}: could not resolve host '{host}'") from exc
     if not infos:
-        raise ToolError(f"http_get: could not resolve host '{host}'")
+        raise ToolError(f"{kind}: could not resolve host '{host}'")
     ips: list[str] = []
     seen: set[str] = set()
     for info in infos:
@@ -510,7 +524,7 @@ def _resolve_public_ips(host: str) -> list[str]:
             seen.add(text)
             ips.append(text)
     if not ips:
-        raise ToolError(f"http_get: could not resolve host '{host}'")
+        raise ToolError(f"{kind}: could not resolve host '{host}'")
     return ips
 
 
