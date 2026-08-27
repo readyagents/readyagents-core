@@ -17,13 +17,14 @@ A workflow is a YAML (or JSON) file with:
 
 | Type | Role |
 | --- | --- |
-| `agent` | LLM call with a prompt template |
+| `agent` | LLM call with a prompt template. Optional `tools:` allowlist runs a bounded tool-use loop (real registry tools). |
 | `tool` | Call a named builtin, pack, or MCP tool |
 | `condition` | Branch on a small expression |
 | `transform` | Template, JSON parse, or dotted-path extract |
 | `approval` | Human-in-the-loop gate; pauses until `--approve` / `--reject` or an injected decision |
 | `parallel` | Run independent branch nodes concurrently |
 | `include` | Run another workflow file and take its outputs |
+| `foreach` | Sequential map over a list (`{{item}}` / `{{index}}`; default 32 / max 100; no nest) |
 
 Packs may register additional node types.
 
