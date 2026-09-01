@@ -51,7 +51,9 @@ def test_two_approval_gates_need_both_decisions() -> None:
         run_workflow(spec, {}, ExecutionContext(spec, ToolRegistry(), decisions={"g1": "approve"}))
     assert second.value.node_id == "g2"
     state = run_workflow(
-        spec, {}, ExecutionContext(spec, ToolRegistry(), decisions={"g1": "approve", "g2": "approve"})
+        spec,
+        {},
+        ExecutionContext(spec, ToolRegistry(), decisions={"g1": "approve", "g2": "approve"}),
     )
     assert state.status == "succeeded"
     assert state.output_keys["summary"] == "all-yes"
@@ -178,7 +180,9 @@ def test_timeout_on_slow_tool() -> None:
     import time
 
     tools = ToolRegistry()
-    tools.register(FunctionTool(name="slow", description="x", handler=lambda: time.sleep(0.4) or "x"))
+    tools.register(
+        FunctionTool(name="slow", description="x", handler=lambda: time.sleep(0.4) or "x")
+    )
     spec = WorkflowSpec.model_validate(
         {
             "name": "to",
@@ -203,9 +207,7 @@ def test_timeout_does_not_wait_out_the_handler() -> None:
     import time
 
     tools = ToolRegistry()
-    tools.register(
-        FunctionTool(name="slow", description="x", handler=lambda: time.sleep(2) or "x")
-    )
+    tools.register(FunctionTool(name="slow", description="x", handler=lambda: time.sleep(2) or "x"))
     spec = WorkflowSpec.model_validate(
         {
             "name": "to",

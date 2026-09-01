@@ -63,7 +63,7 @@ footer {{ margin-top: 2rem; color: #777; font-size: .85rem; }}
 <table>
 <thead><tr><th>Node</th><th>Type</th><th>Status</th><th>Output</th><th>Attempts</th></tr></thead>
 <tbody>
-{''.join(rows) or '<tr><td colspan="5">No nodes recorded.</td></tr>'}
+{"".join(rows) or '<tr><td colspan="5">No nodes recorded.</td></tr>'}
 </tbody>
 </table>
 <h2>Outputs</h2>

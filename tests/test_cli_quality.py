@@ -10,10 +10,10 @@ from readyagents.config import clear_settings_cache
 
 runner = CliRunner()
 
+
 def _plain(text: str) -> str:
     """Strip ANSI and whitespace so Rich wrapping cannot hide tokens."""
     return re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", text))
-
 
 
 def _run_id(text: str) -> str:
@@ -307,9 +307,7 @@ nodes:
 
 
 def test_run_json_success() -> None:
-    result = runner.invoke(
-        app, ["run", "examples/calc_pipeline.yaml", "--json", "--no-persist"]
-    )
+    result = runner.invoke(app, ["run", "examples/calc_pipeline.yaml", "--json", "--no-persist"])
     assert result.exit_code == 0, result.stdout + result.stderr
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
@@ -427,9 +425,7 @@ nodes:
     assert data.get("run", {}).get("pending_node") == "nested"
     assert data.get("run", {}).get("run_id") == run_id
 
-    resumed = runner.invoke(
-        app, ["resume", run_id, "--approve", "gate", "--json"]
-    )
+    resumed = runner.invoke(app, ["resume", run_id, "--approve", "gate", "--json"])
     assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
     done = _json_from_cli(resumed.stdout)
     assert isinstance(done, dict)
@@ -440,9 +436,7 @@ nodes:
 
 
 def test_run_json_paused_approval() -> None:
-    result = runner.invoke(
-        app, ["run", "examples/approval_gate.yaml", "--json", "--no-persist"]
-    )
+    result = runner.invoke(app, ["run", "examples/approval_gate.yaml", "--json", "--no-persist"])
     assert result.exit_code == 2, result.stdout + result.stderr
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
@@ -489,9 +483,7 @@ nodes:
 """,
         encoding="utf-8",
     )
-    dry = runner.invoke(
-        app, ["run", str(wf), "--dry-run", "--json", "--no-persist"]
-    )
+    dry = runner.invoke(app, ["run", str(wf), "--dry-run", "--json", "--no-persist"])
     assert dry.exit_code == 0, dry.stdout + dry.stderr
     assert not target.exists()
     data = _json_from_cli(dry.stdout)
@@ -656,9 +648,7 @@ def test_run_missing_file_exits_1_not_pause_2(tmp_path: Path) -> None:
     assert "Workflow file not found" in text
     assert "nope.yaml" in text
 
-    paused = runner.invoke(
-        app, ["run", "examples/approval_gate.yaml", "--no-persist"]
-    )
+    paused = runner.invoke(app, ["run", "examples/approval_gate.yaml", "--no-persist"])
     assert paused.exit_code == 2, paused.stdout + paused.stderr
     assert "ApprovalRequired" in paused.stdout + paused.stderr
 
@@ -741,4 +731,3 @@ def test_runs_inspect_json_missing_id(tmp_path: Path, monkeypatch) -> None:
     assert isinstance(data, dict)
     assert data["ok"] is False
     assert data["run_id"] == "nope"
-

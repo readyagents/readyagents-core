@@ -44,7 +44,12 @@ def test_persist_after_each_node_then_resume_skips_success(tmp_path: Path, tmp_s
                     "retry": {"max_attempts": 1, "backoff_seconds": 0},
                     "next": "c",
                 },
-                {"id": "c", "type": "transform", "template": "{{first}}-{{second}}", "output_key": "out"},
+                {
+                    "id": "c",
+                    "type": "transform",
+                    "template": "{{first}}-{{second}}",
+                    "output_key": "out",
+                },
             ],
         }
     )
@@ -82,7 +87,13 @@ def test_resume_approval_after_pause(tmp_path: Path, tmp_settings) -> None:
         {
             "name": "gate-resume",
             "nodes": [
-                {"id": "prep", "type": "transform", "template": "hi", "output_key": "msg", "next": "gate"},
+                {
+                    "id": "prep",
+                    "type": "transform",
+                    "template": "hi",
+                    "output_key": "msg",
+                    "next": "gate",
+                },
                 {
                     "id": "gate",
                     "type": "approval",
@@ -90,7 +101,12 @@ def test_resume_approval_after_pause(tmp_path: Path, tmp_settings) -> None:
                     "then": "done",
                     "else": "no",
                 },
-                {"id": "done", "type": "transform", "template": "go {{msg}}", "output_key": "summary"},
+                {
+                    "id": "done",
+                    "type": "transform",
+                    "template": "go {{msg}}",
+                    "output_key": "summary",
+                },
                 {"id": "no", "type": "transform", "template": "stop", "output_key": "summary"},
             ],
         }
@@ -106,7 +122,9 @@ def test_resume_approval_after_pause(tmp_path: Path, tmp_settings) -> None:
     assert loaded.status == "paused"
     assert loaded.pending_node == "gate"
 
-    ctx = ExecutionContext(spec, ToolRegistry(), decisions={"gate": "approve"}, on_persist=on_persist)
+    ctx = ExecutionContext(
+        spec, ToolRegistry(), decisions={"gate": "approve"}, on_persist=on_persist
+    )
     state = run_workflow(spec, loaded.inputs, ctx, state=loaded)
     assert state.status == "succeeded"
     assert state.output_keys["summary"] == "go hi"

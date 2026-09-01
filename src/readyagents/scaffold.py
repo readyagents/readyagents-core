@@ -272,9 +272,7 @@ def create_project(dest: Path, *, name: str, template: str = "pipeline") -> list
     dest.mkdir(parents=True, exist_ok=True)
     kind = (template or "pipeline").strip().lower()
     if kind not in _WORKFLOWS:
-        raise ConfigError(
-            f"Unknown template '{template}'. Choose one of: {', '.join(TEMPLATES)}"
-        )
+        raise ConfigError(f"Unknown template '{template}'. Choose one of: {', '.join(TEMPLATES)}")
     workflow = dest / "workflow.yaml"
     readme = dest / "README.md"
     env_example = dest / ".env.example"

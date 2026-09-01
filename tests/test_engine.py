@@ -33,7 +33,12 @@ def test_sequential_transforms() -> None:
             "name": "seq",
             "inputs": {"name": "Ada"},
             "nodes": [
-                {"id": "a", "type": "transform", "template": "hello {{name}}", "output_key": "greet"},
+                {
+                    "id": "a",
+                    "type": "transform",
+                    "template": "hello {{name}}",
+                    "output_key": "greet",
+                },
                 {"id": "b", "type": "transform", "template": "{{greet}}!", "output_key": "out"},
             ],
         }
@@ -151,7 +156,13 @@ def test_approval_pauses_without_decision() -> None:
             "name": "hitl",
             "start": "prep",
             "nodes": [
-                {"id": "prep", "type": "transform", "template": "42", "output_key": "n", "next": "gate"},
+                {
+                    "id": "prep",
+                    "type": "transform",
+                    "template": "42",
+                    "output_key": "n",
+                    "next": "gate",
+                },
                 {
                     "id": "gate",
                     "type": "approval",
@@ -181,7 +192,13 @@ def test_approval_continues_when_approved() -> None:
             "name": "hitl-ok",
             "start": "prep",
             "nodes": [
-                {"id": "prep", "type": "transform", "template": "7", "output_key": "n", "next": "gate"},
+                {
+                    "id": "prep",
+                    "type": "transform",
+                    "template": "7",
+                    "output_key": "n",
+                    "next": "gate",
+                },
                 {
                     "id": "gate",
                     "type": "approval",
@@ -189,7 +206,12 @@ def test_approval_continues_when_approved() -> None:
                     "then": "ok",
                     "else": "no",
                 },
-                {"id": "ok", "type": "transform", "template": "approved {{n}}", "output_key": "summary"},
+                {
+                    "id": "ok",
+                    "type": "transform",
+                    "template": "approved {{n}}",
+                    "output_key": "summary",
+                },
                 {"id": "no", "type": "transform", "template": "denied", "output_key": "summary"},
             ],
         }
@@ -303,7 +325,13 @@ def test_dry_run_parse_json_does_not_crash() -> None:
         {
             "name": "dry-json",
             "nodes": [
-                {"id": "a", "type": "agent", "prompt": "json please", "output_key": "raw", "next": "p"},
+                {
+                    "id": "a",
+                    "type": "agent",
+                    "prompt": "json please",
+                    "output_key": "raw",
+                    "next": "p",
+                },
                 {
                     "id": "p",
                     "type": "transform",
