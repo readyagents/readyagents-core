@@ -251,7 +251,9 @@ def test_http_get_pins_resolved_ip_against_rebind(monkeypatch: pytest.MonkeyPatc
 
     connected: list[str] = []
 
-    def fake_create(address: tuple, timeout: object = None, source_address: object = None) -> object:
+    def fake_create(
+        address: tuple, timeout: object = None, source_address: object = None
+    ) -> object:
         connected.append(address[0])
         raise OSError("pinned")
 
@@ -369,9 +371,9 @@ def test_json_get_rejects_large_payload(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(builtin_mod, "_MAX_JSON_BYTES", 8)
     with pytest.raises(ToolError, match="too large"):
-        tool_json_get("{\"a\": 12345}", "a")
+        tool_json_get('{"a": 12345}', "a")
     with pytest.raises(ToolError, match="too large"):
-        tool_json_get(b"{\"a\": 12345}", "a")
+        tool_json_get(b'{"a": 12345}', "a")
 
 
 def test_read_file_rejects_large_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -390,4 +392,3 @@ def test_write_file_rejects_large_content(tmp_path: Path, monkeypatch: pytest.Mo
     with pytest.raises(ToolError, match="too large"):
         tool_write_file("out.txt", "0123456789", workspace=tmp_path)
     assert not (tmp_path / "out.txt").exists()
-

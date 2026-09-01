@@ -14,7 +14,12 @@ def test_html_report_contains_timeline_and_usage(tmp_path: Path) -> None:
         {
             "name": "rep",
             "nodes": [
-                {"id": "t", "type": "transform", "template": "hello-report", "output_key": "summary"}
+                {
+                    "id": "t",
+                    "type": "transform",
+                    "template": "hello-report",
+                    "output_key": "summary",
+                }
             ],
         }
     )
