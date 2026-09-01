@@ -145,7 +145,7 @@ Supported expressions (no Python `eval`):
   else: denied
 ```
 
-The engine **pauses** (status `paused`, `pending_node` set) until you pass an explicit decision. It does not block on a TTY.
+The engine **pauses** (CLI exit **2**, status `paused`, `pending_node` set) until you pass an explicit decision. Exit 2 is paused / decision pending, not a crash. It does not block on a TTY. Put **one** gate in front of a risky step (`examples/gated_write.yaml`); do not wrap every tool.
 
 ```bash
 readyagents run pay.yaml --approve gate
@@ -261,6 +261,7 @@ readyagents runs replay <run_id>
 | --- | --- | --- |
 | `examples/calc_pipeline.yaml` | No | Clone-and-run smoke test |
 | `examples/approval_gate.yaml` | No | Human-in-the-loop approval |
+| `examples/gated_write.yaml` | No | calc → one approval → write_file; pause does not create the file |
 | `examples/multi_gate.yaml` | No | Two sequential approval gates |
 | `examples/fanout_gate.yaml` | No | Parallel fan-out + approval |
 | `examples/include_demo.yaml` | No | Sub-workflow `include` |
