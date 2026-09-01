@@ -18,7 +18,7 @@ readyagents runs report <run_id>
 readyagents run examples/approval_gate.yaml
 ```
 
-The CLI exits **2** and the run status is `paused`. That means a human gate is waiting, not that the install failed.
+The CLI exits **2** and the run status is `paused`. That means a human gate is waiting — a decision is pending — not that the install crashed.
 
 ```bash
 readyagents resume <run_id> --approve gate
@@ -32,6 +32,13 @@ Or inject a JSON decision without `--approve` flags:
 
 ```bash
 readyagents decide <run_id> --node gate --decision approve
+```
+
+One gate is enough. `examples/gated_write.yaml` does `calc`, then a single approval, then `write_file`. Exit **2** means the file is still absent. `--approve gate` writes once. Reject never writes. That is not a rubber-stamp prompt on every tool.
+
+```bash
+readyagents run examples/gated_write.yaml
+readyagents resume <run_id> --approve gate
 ```
 
 ## 3. Start your own file
