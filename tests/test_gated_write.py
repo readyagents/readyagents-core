@@ -12,11 +12,17 @@ from readyagents.config import clear_settings_cache
 runner = CliRunner()
 
 
+def _plain(text: str) -> str:
+    """Strip ANSI and whitespace so Rich wrapping cannot hide tokens."""
+    return re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", text))
+
+
 def _run_id(text: str) -> str:
-    match = re.search(r"run_id:\s*([0-9a-f]{16,})", text)
+    blob = _plain(text)
+    match = re.search(r"run_id:([0-9a-f]{16,})", blob)
     if match:
         return match.group(1)
-    match = re.search(r"Run ([0-9a-f]{16,}) —", text)
+    match = re.search(r"Run([0-9a-f]{16,})—", blob)
     if match:
         return match.group(1)
     raise AssertionError(f"no run id in:\n{text}")
