@@ -1,0 +1,37 @@
+name: gated_write
+version: "1"
+description: >
+  Keyless: calc, then one approval, then write_file. Pause (exit 2) does not
+  create the file. Approve writes once. Reject never writes.
+  Pause:  readyagents run examples/gated_write.yaml
+  Resume: readyagents resume <run_id> --approve gate
+  One shot: readyagents run examples/gated_write.yaml --approve gate
+
+start: add
+nodes:
+  - id: add
+    type: tool
+    tool: calc
+    arguments:
+      expression: "19 + 23"
+    output_key: total
+    next: gate
+
+  - id: gate
+    type: approval
+    prompt: "Write gated.txt with total {{total}}?"
+    then: write
+    else: denied
+
+  - id: write
+    type: tool
+    tool: write_file
+    arguments:
+      path: gated.txt
+      content: "gated_write ok: {{total}}\n"
+    output_key: written
+
+  - id: denied
+    type: transform
+    template: "gated_write denied: {{total}}"
+    output_key: summary
