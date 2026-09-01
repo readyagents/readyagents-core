@@ -21,7 +21,7 @@ make smoke
 
 `make lint` is `ruff check` plus `ruff format --check`. `make run-example` smokes `calc_pipeline`, `approval_gate`, and `composed_gate` (keyless).
 
-GitHub CI still only runs `ruff check`. The one public job is [#28](https://github.com/readyagents/readyagents-core/issues/28): add `ruff format --check` so CI matches `make lint`.
+GitHub CI's Ruff step matches `make lint`: `ruff check` plus `ruff format --check` on `src` and `tests` ([#32](https://github.com/readyagents/readyagents-core/pull/32)).
 
 Or:
 
