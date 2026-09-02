@@ -1,0 +1,62 @@
+{
+  "name": "calc_pipeline",
+  "version": "1",
+  "description": "Smoke test — builtin tools and transforms only. No LLM, no API keys, no network. Run: readyagents run examples/calc_pipeline.json Then: readyagents runs list && readyagents runs show <run_id>\n",
+  "start": "add",
+  "nodes": [
+    {
+      "id": "add",
+      "type": "tool",
+      "tool": "calc",
+      "arguments": {
+        "expression": "2 + 2 * 10"
+      },
+      "output_key": "sum",
+      "next": "stamp"
+    },
+    {
+      "id": "stamp",
+      "type": "tool",
+      "tool": "now",
+      "output_key": "timestamp",
+      "next": "payload"
+    },
+    {
+      "id": "payload",
+      "type": "transform",
+      "template": "{\"value\": {{sum}}, \"when\": \"{{timestamp}}\"}",
+      "output_key": "payload",
+      "next": "pick"
+    },
+    {
+      "id": "pick",
+      "type": "tool",
+      "tool": "json_get",
+      "arguments": {
+        "data": "{{payload}}",
+        "path": "value"
+      },
+      "output_key": "extracted",
+      "next": "check"
+    },
+    {
+      "id": "check",
+      "type": "condition",
+      "when": "extracted == 22",
+      "then": "ok",
+      "else": "bad"
+    },
+    {
+      "id": "ok",
+      "type": "transform",
+      "template": "calc_pipeline ok: {{extracted}} at {{timestamp}}",
+      "output_key": "summary"
+    },
+    {
+      "id": "bad",
+      "type": "transform",
+      "template": "calc_pipeline unexpected value: {{extracted}}",
+      "output_key": "summary"
+    }
+  ]
+}
