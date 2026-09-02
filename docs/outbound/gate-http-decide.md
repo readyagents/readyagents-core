@@ -9,5 +9,3 @@ readyagents run examples/approval_gate.yaml          # exit 2, paused
 ```
 
 A valid signature resumes the run (`approval_gate ok`). An unsigned or forged signature leaves the run paused.
-
-**Implementation CTA:** if you want signed HTTP decide wired onto your own approval workflow (payload schema, secret rotation, one-shot or pack listener), open a GitHub issue titled “Gate HTTP decide — implementation” on [readyagents-core](https://github.com/readyagents/readyagents-core) with a short description of the workflow file and who should be allowed to POST.
