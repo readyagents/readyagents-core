@@ -109,7 +109,7 @@ def init_cmd(
         dest.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
     else:
         dest.write_text(_ENV_TEMPLATE, encoding="utf-8")
-    console.print(f"[green]Wrote {dest}[/green] — add your BYOK API keys, then run:")
+    console.print(f"[green]Wrote {dest}[/green] — then the keyless smoke:")
     _print_next_steps()
 
 
