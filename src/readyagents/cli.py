@@ -117,10 +117,10 @@ def _print_next_steps() -> None:
     console.print(
         Panel(
             "[bold]Next steps[/bold]\n"
-            "1. Edit `.env` and set OPENAI_API_KEY and/or ANTHROPIC_API_KEY\n"
-            "2. Scaffold:  [cyan]readyagents new my-flow[/cyan]\n"
-            "3. Smoke test (no keys):  "
+            "1. Smoke test (no keys):  "
             "[cyan]readyagents run examples/calc_pipeline.yaml[/cyan]\n"
+            "2. Scaffold:  [cyan]readyagents new my-flow[/cyan]\n"
+            "3. Edit `.env` and set OPENAI_API_KEY and/or ANTHROPIC_API_KEY\n"
             "4. With keys:  [cyan]readyagents run examples/research_brief.yaml "
             "--input topic=your-topic[/cyan]\n"
             "See docs/getting-started.md",
