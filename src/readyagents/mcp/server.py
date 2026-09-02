@@ -39,7 +39,7 @@ def _create_server(name: str) -> Any:
 def construct_server(*, allow_http: bool | None = None, workspace: Path | None = None) -> Any:
     """Build an MCP server that exposes builtin tools. Does not start a transport."""
     if not mcp_available():
-        raise MCPError("MCP extra is not installed. Run: pip install 'readyagents[mcp]'")
+        raise MCPError("MCP extra is not installed. Run: pip install -e ".[mcp]"")
 
     settings = get_settings()
     allow = settings.allow_http if allow_http is None else allow_http
