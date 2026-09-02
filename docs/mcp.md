@@ -56,7 +56,7 @@ readyagents mcp serve
 
 Speaks MCP over **stdio**. Other agents can call `now`, `calc`, `json_get`, `json_set`, `json_merge`, `list_dir`, `read_file`, `write_file`, `http_get` (if enabled), and `run_workflow`.
 
-`run_workflow` takes `path` (workflow file) and `inputs_json` (JSON object). `path` must stay under the server workspace (the same sandbox as `read_file` / `write_file`).
+`run_workflow` takes `path` (workflow file) and `inputs_json` (JSON object). `path` must stay under the server workspace (the same sandbox as `list_dir` / `read_file` / `write_file`).
 
 Point your MCP host at the `readyagents` CLI command. Example Claude Desktop / host config sketch:
 

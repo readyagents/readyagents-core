@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from readyagents.errors import MCPError
+from readyagents.errors import MCPError, ToolError
 from readyagents.mcp.server import _create_server, construct_server, mcp_available
 
 pytestmark = pytest.mark.skipif(not mcp_available(), reason="mcp extra not installed")
@@ -30,6 +30,7 @@ def test_construct_server_exposes_builtin_tools(tmp_path: Path) -> None:
         "json_get",
         "json_set",
         "json_merge",
+        "list_dir",
         "read_file",
         "write_file",
         "http_get",
@@ -49,6 +50,39 @@ def test_construct_server_exposes_builtin_tools(tmp_path: Path) -> None:
     written = by_name["write_file"].fn(path="note.txt", content="hello")
     assert Path(written).read_text(encoding="utf-8") == "hello"
     assert by_name["read_file"].fn(path="note.txt") == "hello"
+    (tmp_path / ".secret").write_text("nope", encoding="utf-8")
+    listing = json.loads(by_name["list_dir"].fn(path="."))
+    names = [row["name"] for row in listing]
+    assert "note.txt" in names
+    assert ".secret" not in names
+    hidden = json.loads(by_name["list_dir"].fn(path=".", include_hidden=True))
+    assert ".secret" in [row["name"] for row in hidden]
+
+
+def test_mcp_list_dir_refuses_escape_and_symlink(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "inside.txt").write_text("ok", encoding="utf-8")
+    server = construct_server(allow_http=False, workspace=workspace)
+    list_dir = {t.name: t for t in server._tool_manager.list_tools()}["list_dir"].fn
+    rows = json.loads(list_dir(path="."))
+    assert "inside.txt" in [row["name"] for row in rows]
+    with pytest.raises(ToolError, match="outside"):
+        list_dir(path="../")
+    with pytest.raises(ToolError, match="outside"):
+        list_dir(path=str(tmp_path))
+    victim = tmp_path / "outside_dir"
+    victim.mkdir()
+    (victim / "secret.txt").write_text("secret", encoding="utf-8")
+    link = workspace / "leak"
+    try:
+        link.symlink_to(victim)
+    except OSError:
+        pytest.skip("symlinks not supported")
+    with pytest.raises(ToolError, match="outside"):
+        list_dir(path="leak")
+    still = json.loads(list_dir(path="."))
+    assert "leak" not in [row["name"] for row in still]
 
 
 def test_mcp_run_workflow_stays_in_workspace(tmp_path: Path, monkeypatch) -> None:

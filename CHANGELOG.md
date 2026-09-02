@@ -4,6 +4,10 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+### Fixed
+
+- MCP `serve` registers `list_dir` (same workspace sandbox as `read_file` / `write_file`).
+
 ## 0.8.0 — 2026-09-02
 
 ### Added

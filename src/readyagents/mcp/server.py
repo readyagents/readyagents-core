@@ -97,6 +97,17 @@ def _register_server_tools(server: Any, tools: dict[str, Any], *, workspace: Pat
     def http_get(url: str) -> str:
         return str(tools["http_get"].run(url=url))
 
+    @server.tool(name="list_dir", description=tools["list_dir"].description)
+    def list_dir(path: str = ".", include_hidden: bool = False, max_entries: int = 200) -> str:
+        import json
+
+        result = tools["list_dir"].run(
+            path=path, include_hidden=include_hidden, max_entries=max_entries
+        )
+        if isinstance(result, (dict, list)):
+            return json.dumps(result)
+        return str(result)
+
     @server.tool(name="read_file", description=tools["read_file"].description)
     def read_file(path: str) -> str:
         return str(tools["read_file"].run(path=path))
