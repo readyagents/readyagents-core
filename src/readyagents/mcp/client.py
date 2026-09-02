@@ -159,7 +159,7 @@ class MCPClient:
             names = ", ".join(self._servers)
             raise MCPError(
                 f"Workflow declares MCP servers ({names}) but the mcp extra is not installed. "
-                "Run: pip install -e ".[mcp]""
+                'Run: pip install -e ".[mcp]"'
             )
         self._loop = _AsyncLoop()
         try:
