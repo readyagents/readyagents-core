@@ -1,4 +1,4 @@
-"""ReadyAgents Core: Agent Workflow engine + MCP Toolkit."""
+"""Local one-shot YAML/JSON agent workflow engine + MCP toolkit (BYOK). Not on PyPI."""
 
 from __future__ import annotations
 
