@@ -28,7 +28,7 @@ readyagents new gated --template approval
 readyagents run gated/workflow.yaml --approve gate
 ```
 
-Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (default; calc/json/condition), `review` (read_file + approval).
+Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (default; calc/json/condition), `review` (read_file + approval), `foreach`, `agent-tools`, `gated`.
 
 ## `readyagents validate PATH`
 

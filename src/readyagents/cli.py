@@ -155,8 +155,10 @@ def new_cmd(
     for path in written:
         console.print(f"  {path.name}")
     wf = target / "workflow.yaml"
-    if template == "basic" or template == "pipeline":
+    if template in {"basic", "pipeline", "foreach"}:
         console.print(f"Run: [cyan]readyagents run {wf}[/cyan]")
+    elif template == "agent-tools":
+        console.print(f"Run: [cyan]readyagents run {wf} --dry-run[/cyan]")
     elif template == "research":
         console.print(f"Run: [cyan]readyagents run {wf} --approve publish[/cyan]")
     else:

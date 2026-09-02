@@ -298,6 +298,61 @@ def test_new_template_review(tmp_path: Path, monkeypatch) -> None:
     assert "accepted" in ran.stdout
 
 
+def test_new_template_foreach(tmp_path: Path) -> None:
+    dest = tmp_path / "each"
+    result = runner.invoke(app, ["new", "each", "--dest", str(dest), "--template", "foreach"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (dest / "workflow.yaml").is_file()
+    assert (dest / "README.md").is_file()
+    assert (dest / ".env.example").is_file()
+    text = (dest / "workflow.yaml").read_text(encoding="utf-8")
+    assert "type: foreach" in text
+    ran = runner.invoke(app, ["run", str(dest / "workflow.yaml"), "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "succeeded" in ran.stdout
+
+
+def test_new_template_agent_tools(tmp_path: Path) -> None:
+    dest = tmp_path / "tools"
+    result = runner.invoke(app, ["new", "tools", "--dest", str(dest), "--template", "agent-tools"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    text = (dest / "workflow.yaml").read_text(encoding="utf-8")
+    assert "tools:" in text
+    assert "calc" in text
+    ran = runner.invoke(app, ["run", str(dest / "workflow.yaml"), "--dry-run", "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "succeeded" in ran.stdout
+
+
+def test_new_template_gated_pauses_without_write(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    dest = tmp_path / "gated"
+    result = runner.invoke(app, ["new", "gated", "--dest", str(dest), "--template", "gated"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    wf = dest / "workflow.yaml"
+    assert "type: approval" in wf.read_text(encoding="utf-8")
+    paused = runner.invoke(app, ["run", str(wf)])
+    assert paused.exit_code == 2, paused.stdout + paused.stderr
+    assert not (dest / "gated.txt").exists()
+    assert not (tmp_path / "gated.txt").exists()
+    approved = runner.invoke(app, ["run", str(wf), "--approve", "gate", "--no-persist"])
+    assert approved.exit_code == 0, approved.stdout + approved.stderr
+    assert "succeeded" in approved.stdout
+    written = dest / "gated.txt"
+    cwd_written = tmp_path / "gated.txt"
+    assert written.is_file() or cwd_written.is_file()
+    clear_settings_cache()
+
+
+def test_new_default_template_is_pipeline(tmp_path: Path) -> None:
+    dest = tmp_path / "def"
+    result = runner.invoke(app, ["new", "def", "--dest", str(dest)])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    text = (dest / "workflow.yaml").read_text(encoding="utf-8")
+    assert "json_get" in text or "pipeline" in text.lower() or "extracted" in text
+
+
 def test_new_refuses_overwrite(tmp_path: Path) -> None:
     dest = tmp_path / "existing"
     dest.mkdir()

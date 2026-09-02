@@ -6,7 +6,16 @@ from pathlib import Path
 
 from readyagents.errors import ConfigError
 
-TEMPLATES = ("basic", "approval", "research", "pipeline", "review")
+TEMPLATES = (
+    "basic",
+    "approval",
+    "research",
+    "pipeline",
+    "review",
+    "foreach",
+    "agent-tools",
+    "gated",
+)
 
 _ENV = """# ReadyAgents BYOK — fill in your keys. Never commit real keys.
 
@@ -205,6 +214,87 @@ nodes:
     template: "{name} held: {{{{brief}}}}"
     output_key: result
 """,
+    "foreach": """name: {name}
+version: "1"
+description: >
+  Foreach starter from `readyagents new --template foreach`. No API keys.
+  Run: readyagents run workflow.yaml
+
+inputs:
+  expressions:
+    - "1+1"
+    - "2+2"
+
+start: each
+nodes:
+  - id: each
+    type: foreach
+    items: expressions
+    max_items: 32
+    output_key: results
+    body:
+      id: math
+      type: tool
+      tool: calc
+      arguments:
+        expression: "{{{{item}}}}"
+""",
+    "agent-tools": """name: {name}
+version: "1"
+description: >
+  Agent tools starter (`--template agent-tools`). Live run needs an API key.
+  Keyless dry-run: readyagents run workflow.yaml --dry-run
+
+start: worker
+nodes:
+  - id: worker
+    type: agent
+    prompt: |
+      Use the calc tool if you need arithmetic.
+      What is 2+2? Reply with the number only.
+    tools:
+      - calc
+    max_tool_rounds: 4
+    output_key: answer
+    timeout_seconds: 60
+""",
+    "gated": """name: {name}
+version: "1"
+description: >
+  Gated write starter (`--template gated`). Pause does not create the file.
+  Pause:  readyagents run workflow.yaml
+  Resume: readyagents resume <run_id> --approve gate
+  One shot: readyagents run workflow.yaml --approve gate
+
+start: add
+nodes:
+  - id: add
+    type: tool
+    tool: calc
+    arguments:
+      expression: "19 + 23"
+    output_key: total
+    next: gate
+
+  - id: gate
+    type: approval
+    prompt: "Write gated.txt with total {{{{total}}}}?"
+    then: write
+    else: denied
+
+  - id: write
+    type: tool
+    tool: write_file
+    arguments:
+      path: gated.txt
+      content: "gated ok: {{{{total}}}}\\n"
+    output_key: written
+
+  - id: denied
+    type: transform
+    template: "gated denied: {{{{total}}}}"
+    output_key: summary
+""",
 }
 
 _READMES: dict[str, str] = {
@@ -263,6 +353,34 @@ readyagents run workflow.yaml --dry-run --approve publish
 ```
 
 No API keys required. Add `type: agent` nodes and keys later.
+""",
+    "foreach": """# {name}
+
+Foreach starter (`--template foreach`). Bounded list + `calc`. No API keys.
+
+```bash
+readyagents run workflow.yaml
+```
+""",
+    "agent-tools": """# {name}
+
+Agent tools starter (`--template agent-tools`). Allowlisted `calc`.
+
+```bash
+readyagents run workflow.yaml --dry-run
+# with keys:
+readyagents run workflow.yaml
+```
+""",
+    "gated": """# {name}
+
+Gated write starter (`--template gated`). Pause (exit 2) does not create the file.
+
+```bash
+readyagents run workflow.yaml
+readyagents resume <run_id> --approve gate
+readyagents run workflow.yaml --approve gate
+```
 """,
 }
 
