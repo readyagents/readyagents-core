@@ -90,6 +90,7 @@ flowchart LR
 | File | What it shows |
 | --- | --- |
 | `examples/calc_pipeline.yaml` | Builtin tools, transform, condition |
+| `examples/calc_pipeline.json` | Same graph as `calc_pipeline.yaml` |
 | `examples/approval_gate.yaml` | Human-in-the-loop pause / resume |
 | `examples/multi_gate.yaml` | Two sequential approval gates |
 | `examples/fanout_gate.yaml` | Parallel branches + approval |
