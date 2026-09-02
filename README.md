@@ -20,40 +20,11 @@ cd readyagents-core
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
-```
-
-This package is **not on PyPI**. Install only from the clone above.
-
-Smoke test — **no API keys**:
-
-```bash
 readyagents run examples/calc_pipeline.yaml
 readyagents runs list
-readyagents runs report <run_id>
-
-readyagents new my-flow
-readyagents run examples/approval_gate.yaml --approve gate
-readyagents run examples/composed_gate.yaml --approve gate
-readyagents run examples/multi_gate.yaml --approve first --approve second
 ```
 
-Human-in-the-loop without a decision **pauses** (exit 2, does not hang) and can be resumed:
-
-```bash
-readyagents run examples/approval_gate.yaml
-readyagents runs list
-readyagents resume <run_id> --approve gate
-# or
-readyagents resume <run_id> --reject gate
-# or inject a JSON decision (no always-on webhook server in core):
-readyagents decide <run_id> --file decision.json
-```
-
-With a key in `.env` (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`):
-
-```bash
-readyagents run examples/research_brief.yaml --input topic="agent workflows"
-```
+HITL next: [docs/first-ten-minutes.md](docs/first-ten-minutes.md).
 
 ## What it does
 
