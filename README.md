@@ -105,6 +105,9 @@ flowchart LR
 | `examples/foreach_calc.yaml` | Sequential foreach + `calc` (no keys) |
 | `examples/json_mutate.yaml` | `json_set` / `json_merge` (no keys) |
 | `examples/list_dir.yaml` | Builtin `list_dir` (no keys, no MCP, no Node) |
+| `examples/eval/pass.yaml` | Keyless `readyagents eval` fixture suite |
+| `examples/connector_demo.yaml` | Local `--pack` connector (`examples/packs/connector_pack.py`) |
+| `examples/gated_write.yaml` | Approval then `write_file` (no keys) |
 
 ## Docs
 
