@@ -1,9 +1,9 @@
 name: connector_demo
 version: "1"
 description: >
-  Requires the example connector pack (examples/packs/connector_pack.py).
-  Core discovers it via the readyagents.packs entry point when the pack is
-  installed; tests inject the pack in-process.
+  Requires the example connector pack. Load it locally (no entry point):
+  readyagents run examples/connector_demo.yaml --pack examples/packs/connector_pack.py
+  readyagents packs --pack examples/packs/connector_pack.py
 
 start: ping
 nodes:

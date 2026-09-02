@@ -73,6 +73,7 @@ readyagents run examples/research_brief.yaml --no-persist
 | `--decision-file PATH` | JSON approval decisions (same shapes as `readyagents decide --file`) |
 | `--actor NAME` | Actor id for RBAC hooks (`READYAGENTS_ACTOR`) |
 | `--no-cache` | Skip the local LLM response cache |
+| `--pack PATH` | Load a local pack `.py` (repeatable). Confined to the workspace. Env: `READYAGENTS_PACK` |
 
 Exit code `1` on validation or execution errors, including a missing workflow file (`ConfigError`). Exit code `2` is reserved for an **approval** node pausing for a decision. The CLI prints `ErrorClass: message` rather than a full traceback. Logs include `run=<id>` and `node=<id>`.
 

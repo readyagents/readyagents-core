@@ -1,14 +1,28 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from readyagents.packs.loader import collect_pack_nodes, collect_pack_tools, discover_packs
+import pytest
+
+from readyagents.errors import ConfigError
+from readyagents.packs.loader import (
+    collect_pack_nodes,
+    collect_pack_specs,
+    collect_pack_tools,
+    confine_pack_path,
+    discover_packs,
+    load_pack_file,
+)
 from readyagents.packs.protocol import BasePack
 from readyagents.tools import FunctionTool
 from readyagents.workflow.engine import run_workflow
 from readyagents.workflow.nodes import ExecutionContext
 from readyagents.workflow.runner import run_workflow_file
 from readyagents.workflow.schema import WorkflowSpec
+
+_REPO = Path(__file__).resolve().parents[1]
+_CONNECTOR = _REPO / "examples" / "packs" / "connector_pack.py"
 
 
 class FakePack(BasePack):
@@ -98,3 +112,45 @@ def test_discover_via_entry_points(monkeypatch) -> None:
     assert len(packs) == 1
     assert packs[0].name == "fake"
     assert packs[0].version == "9.9.9"
+
+
+def test_load_pack_file_connector_ping() -> None:
+    pack = load_pack_file(_CONNECTOR, root=_REPO)
+    assert pack.name == "example-connector"
+    registry = collect_pack_tools([pack])
+    result = registry.get("connector_ping").run(message="hello")
+    assert result["ok"] is True
+    assert result["message"] == "hello"
+    assert result["connector"] == "example-connector"
+
+
+def test_run_workflow_file_extra_packs(tmp_settings) -> None:
+    pack = load_pack_file(_CONNECTOR, root=_REPO)
+    state = run_workflow_file(
+        _REPO / "examples" / "connector_demo.yaml",
+        settings=tmp_settings,
+        persist=False,
+        extra_packs=[pack],
+    )
+    assert state.status == "succeeded"
+    assert "hello" in str(state.output_keys["summary"])
+
+
+def test_confine_pack_path_refuses_escape(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="outside the workspace"):
+        confine_pack_path("/etc/passwd", workspace)
+    with pytest.raises(ConfigError, match="outside the workspace"):
+        confine_pack_path("../secret.py", workspace)
+    outside = tmp_path / "secret.py"
+    outside.write_text("def get_pack():\n    return None\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="outside the workspace"):
+        load_pack_file(outside, root=workspace)
+
+
+def test_collect_pack_specs_env_and_flags(monkeypatch) -> None:
+    monkeypatch.setenv("READYAGENTS_PACK", "a.py,b.py")
+    specs = collect_pack_specs(["c.py"])
+    assert specs == ["a.py", "b.py", "c.py"]

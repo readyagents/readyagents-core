@@ -15,7 +15,7 @@ from rich.table import Table
 from readyagents import __version__
 from readyagents.errors import ApprovalRequired, ReadyAgentsError
 from readyagents.logging import configure_logging
-from readyagents.packs.loader import discover_packs
+from readyagents.packs.loader import collect_pack_specs, discover_packs, load_local_packs
 from readyagents.scaffold import TEMPLATES, create_project
 from readyagents.testing.eval import load_eval_suite, run_eval
 from readyagents.workflow.runner import (
@@ -52,6 +52,9 @@ err_console = Console(stderr=True)
 _WORKFLOW_ARG = typer.Argument(
     ...,
     help="Workflow YAML or JSON file.",
+)
+_PACK_HELP = (
+    "Local pack .py to load (repeatable). Confined to the workspace. Env: READYAGENTS_PACK."
 )
 
 
@@ -327,6 +330,7 @@ def run(
         "--no-cache",
         help="Skip the local LLM response cache for this run.",
     ),
+    pack: list[str] = typer.Option([], "--pack", help=_PACK_HELP),
 ) -> None:
     """Execute a workflow."""
     if log_level or log_format:
@@ -335,6 +339,7 @@ def run(
     try:
         parsed = parse_input_pairs(inputs)
         decisions = build_decisions(approve, reject)
+        extra_packs = _load_extra_packs(pack)
         if resume:
             state = resume_run(
                 resume,
@@ -342,6 +347,7 @@ def run(
                 inputs=parsed or None,
                 dry_run=dry_run,
                 persist=persist,
+                extra_packs=extra_packs,
                 decisions=decisions,
                 decision_file=decision_file,
                 actor=actor,
@@ -353,6 +359,7 @@ def run(
                 inputs=parsed,
                 dry_run=dry_run,
                 persist=persist,
+                extra_packs=extra_packs,
                 decisions=decisions,
                 decision_file=decision_file,
                 actor=actor,
@@ -403,6 +410,7 @@ def resume_cmd(
         envvar="READYAGENTS_ACTOR",
     ),
     no_cache: bool = typer.Option(False, "--no-cache"),
+    pack: list[str] = typer.Option([], "--pack", help=_PACK_HELP),
 ) -> None:
     """Resume a paused or failed run from the last successful node."""
     persist = not no_persist
@@ -414,6 +422,7 @@ def resume_cmd(
             inputs=parsed or None,
             dry_run=dry_run,
             persist=persist,
+            extra_packs=_load_extra_packs(pack),
             decisions=build_decisions(approve, reject),
             decision_file=decision_file,
             actor=actor,
@@ -448,6 +457,7 @@ def decide_cmd(
     actor: str | None = typer.Option(None, "--actor", envvar="READYAGENTS_ACTOR"),
     as_json: bool = typer.Option(False, "--json"),
     no_persist: bool = typer.Option(False, "--no-persist"),
+    pack: list[str] = typer.Option([], "--pack", help=_PACK_HELP),
 ) -> None:
     """Inject an external approval decision into a paused run, then resume.
 
@@ -470,6 +480,7 @@ def decide_cmd(
         state = resume_run(
             run_id,
             persist=persist,
+            extra_packs=_load_extra_packs(pack),
             decisions=decisions,
             actor=actor,
         )
@@ -481,10 +492,12 @@ def decide_cmd(
 @app.command("packs")
 def packs_cmd(
     as_json: bool = typer.Option(False, "--json", help="Print JSON instead of a table."),
+    pack: list[str] = typer.Option([], "--pack", help=_PACK_HELP),
 ) -> None:
     """List installed ReadyAgents packs (entry point group readyagents.packs)."""
     try:
-        found = discover_packs()
+        found = list(discover_packs())
+        found.extend(_load_extra_packs(pack))
     except ReadyAgentsError as exc:
         if as_json:
             _print_json(
@@ -621,6 +634,7 @@ def runs_replay(
     decision_file: Path | None = typer.Option(None, "--decision-file"),
     actor: str | None = typer.Option(None, "--actor", envvar="READYAGENTS_ACTOR"),
     no_cache: bool = typer.Option(False, "--no-cache"),
+    pack: list[str] = typer.Option([], "--pack", help=_PACK_HELP),
 ) -> None:
     """Start a new run using the stored workflow path and inputs."""
     persist = not no_persist
@@ -629,6 +643,7 @@ def runs_replay(
             run_id,
             dry_run=dry_run,
             persist=persist,
+            extra_packs=_load_extra_packs(pack),
             decisions=build_decisions(approve, reject),
             decision_file=decision_file,
             actor=actor,
@@ -747,6 +762,16 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
         console.print(Panel(escape(_preview(state.output_keys, limit=2000)), title="Outputs"))
     if state.inputs:
         console.print(Panel(escape(_preview(state.inputs, limit=2000)), title="Inputs"))
+
+
+def _load_extra_packs(pack_flags: list[str]) -> list[Any]:
+    """Load --pack / READYAGENTS_PACK modules confined to the workspace."""
+    from readyagents.config import get_settings
+
+    specs = collect_pack_specs(pack_flags)
+    if not specs:
+        return []
+    return load_local_packs(specs, root=get_settings().workspace_path())
 
 
 def _print_json(payload: object) -> None:

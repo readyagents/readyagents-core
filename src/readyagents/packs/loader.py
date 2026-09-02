@@ -1,9 +1,15 @@
-"""Load installed packs via importlib.metadata entry points."""
+"""Load installed packs via importlib.metadata entry points and local files."""
 
 from __future__ import annotations
 
+import importlib.util
+import os
+import sys
+from collections.abc import Sequence
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from readyagents.errors import ConfigError
 from readyagents.logging import get_logger
@@ -80,3 +86,72 @@ def collect_pack_authorizers(packs: list[Pack] | None = None) -> list[Any]:
             continue
         authorizers.extend(list(fn() or []))
     return authorizers
+
+
+def collect_pack_specs(flags: Sequence[str] | None = None, *, env: str | None = None) -> list[str]:
+    """Combine READYAGENTS_PACK (pathsep or comma) with repeatable --pack flags."""
+    out: list[str] = []
+    raw_env = os.environ.get("READYAGENTS_PACK") if env is None else env
+    if raw_env:
+        normalized = raw_env.replace(",", os.pathsep)
+        for part in normalized.split(os.pathsep):
+            piece = part.strip()
+            if piece:
+                out.append(piece)
+    for flag in flags or ():
+        text = str(flag).strip()
+        if text:
+            out.append(text)
+    return out
+
+
+def confine_pack_path(raw: str | Path, root: Path) -> Path:
+    """Resolve ``raw`` and refuse anything outside ``root`` (symlink-aware)."""
+    root = Path(root).resolve()
+    text = str(raw).strip()
+    if not text or "\x00" in text:
+        raise ConfigError(f"Pack path must be a Python file under {root}")
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(root):
+        raise ConfigError(
+            f"Pack path is outside the workspace: {raw} "
+            f"(resolved to {resolved}, must stay under {root})"
+        )
+    if not resolved.is_file():
+        raise ConfigError(f"Pack file not found: {raw}")
+    if resolved.suffix.lower() != ".py":
+        raise ConfigError(f"Pack path must be a Python file: {raw}")
+    return resolved
+
+
+def load_pack_file(raw: str | Path, *, root: Path) -> Pack:
+    """Import a local pack module confined under ``root``."""
+    path = confine_pack_path(raw, root)
+    mod_name = f"_readyagents_pack_{path.stem}_{uuid4().hex[:8]}"
+    spec = importlib.util.spec_from_file_location(mod_name, path)
+    if spec is None or spec.loader is None:
+        raise ConfigError(f"Could not load pack {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[mod_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as extra:
+        sys.modules.pop(mod_name, None)
+        raise ConfigError(f"Failed to load pack '{path}': {extra}") from extra
+    getter = getattr(module, "get_pack", None)
+    if callable(getter):
+        loaded = getter()
+        if _is_pack_instance(loaded):
+            log.debug("Loaded local pack %s %s from %s", loaded.name, loaded.version, path)
+            return loaded
+        raise ConfigError(f"get_pack() in {path} did not return a Pack")
+    if _is_pack_instance(module):
+        return module  # type: ignore[return-value]
+    raise ConfigError(f"Pack {path} needs get_pack() or a Pack instance")
+
+
+def load_local_packs(specs: Sequence[str], *, root: Path) -> list[Pack]:
+    return [load_pack_file(spec, root=root) for spec in specs]

@@ -1,7 +1,7 @@
 """Example pack: a local connector tool (no network, no vendor SDK).
 
-Install in a real pack via the ``readyagents.packs`` entry point. Tests load
-this module and monkeypatch ``discover_packs`` — core itself ships zero packs.
+Load locally with ``readyagents run ... --pack examples/packs/connector_pack.py``.
+A published pack uses the ``readyagents.packs`` entry point. Core ships zero packs.
 """
 
 from __future__ import annotations

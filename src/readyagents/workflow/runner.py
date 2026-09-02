@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +100,7 @@ def run_workflow_file(
     llm: LLMProvider | None = None,
     persist: bool = True,
     extra_tools: ToolRegistry | None = None,
+    extra_packs: Sequence[Any] | None = None,
     decisions: Mapping[str, str] | None = None,
     resume_state: RunState | None = None,
     actor: str | None = None,
@@ -137,7 +138,9 @@ def run_workflow_file(
     allow_http = bool(workflow.allow_http or settings.allow_http)
 
     tools = default_registry(allow_http=allow_http, workspace=workspace)
-    packs = discover_packs()
+    packs = list(discover_packs())
+    if extra_packs:
+        packs.extend(list(extra_packs))
     tools.merge(collect_pack_tools(packs))
     if extra_tools:
         tools.merge(extra_tools)
@@ -282,6 +285,7 @@ def resume_run(
     dry_run: bool = False,
     persist: bool = True,
     extra_tools: ToolRegistry | None = None,
+    extra_packs: Sequence[Any] | None = None,
     decisions: Mapping[str, str] | None = None,
     llm: LLMProvider | None = None,
     actor: str | None = None,
@@ -304,6 +308,7 @@ def resume_run(
         llm=llm,
         persist=persist,
         extra_tools=extra_tools,
+        extra_packs=extra_packs,
         decisions=decisions,
         resume_state=state,
         actor=actor,
@@ -322,6 +327,7 @@ def replay_run(
     persist: bool = True,
     dry_run: bool = False,
     extra_tools: ToolRegistry | None = None,
+    extra_packs: Sequence[Any] | None = None,
     decisions: Mapping[str, str] | None = None,
     llm: LLMProvider | None = None,
     actor: str | None = None,
@@ -344,6 +350,7 @@ def replay_run(
         llm=llm,
         persist=persist,
         extra_tools=extra_tools,
+        extra_packs=extra_packs,
         decisions=decisions,
         actor=actor,
         authorizer=authorizer,

@@ -47,6 +47,56 @@ def test_packs_none_installed() -> None:
     assert "No packs installed" in result.stdout
 
 
+def test_run_connector_demo_with_pack() -> None:
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "examples/connector_demo.yaml",
+            "--pack",
+            "examples/packs/connector_pack.py",
+            "--no-persist",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "succeeded" in result.stdout
+    assert "connector_demo ok" in result.stdout
+    assert "hello" in result.stdout
+
+
+def test_run_connector_demo_without_pack() -> None:
+    result = runner.invoke(app, ["run", "examples/connector_demo.yaml", "--no-persist"])
+    assert result.exit_code == 1
+    text = result.stdout + result.stderr
+    assert "connector_ping" in text
+
+
+def test_packs_lists_local_pack() -> None:
+    result = runner.invoke(app, ["packs", "--pack", "examples/packs/connector_pack.py"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "example-connector" in result.stdout
+
+
+def test_pack_path_escape_refused(tmp_path: Path, monkeypatch) -> None:
+    clear_settings_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("READYAGENTS_WORKSPACE", str(tmp_path))
+    result = runner.invoke(
+        app,
+        ["packs", "--pack", "/etc/passwd"],
+    )
+    assert result.exit_code == 1
+    text = result.stdout + result.stderr
+    assert "ConfigError" in text
+    assert "outside" in text.lower()
+    parent = tmp_path.parent / "escaped_pack.py"
+    parent.write_text("def get_pack():\n    return None\n", encoding="utf-8")
+    rel = runner.invoke(app, ["packs", "--pack", "../escaped_pack.py"])
+    assert rel.exit_code == 1
+    assert "outside" in (rel.stdout + rel.stderr).lower()
+    clear_settings_cache()
+
+
 def test_run_calc_pipeline() -> None:
     result = runner.invoke(app, ["run", "examples/calc_pipeline.yaml", "--no-persist"])
     assert result.exit_code == 0, result.stdout + result.stderr
