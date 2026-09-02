@@ -24,6 +24,8 @@ readyagents run examples/calc_pipeline.yaml
 readyagents runs list
 ```
 
+`readyagents run examples/calc_pipeline.json` is the same graph.
+
 HITL next: [docs/first-ten-minutes.md](docs/first-ten-minutes.md).
 
 ## What it does
