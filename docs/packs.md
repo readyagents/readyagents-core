@@ -20,7 +20,7 @@ class ContinuousPack(BasePack):
         return [
             FunctionTool(
                 name="watch_queue",
-                description="Premium always-on helper",
+                description="example always-on helper (not published)",
                 handler=lambda: "not in core",
             )
         ]
