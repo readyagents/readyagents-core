@@ -96,9 +96,10 @@ flowchart LR
 | Command | Purpose |
 | --- | --- |
 | `readyagents init` | Write `.env` from `.env.example` if missing |
-| `readyagents new [name] [--template basic\|approval\|research\|pipeline\|review]` | Scaffold workflow + README + `.env.example` |
+| `readyagents new [name] [--template basic\|approval\|research\|pipeline\|review\|foreach\|agent-tools\|gated]` | Scaffold workflow + README + `.env.example` |
 | `readyagents validate PATH` | Schema-validate a workflow |
-| `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE] [--reject NODE] [--decision-file FILE] [--actor NAME]` | Execute |
+| `readyagents eval PATH` | Score a keyless fixture suite (exit 0/1) |
+| `readyagents run PATH [--input KEY=VALUE] [--dry-run] [--approve NODE] [--reject NODE] [--decision-file FILE] [--actor NAME] [--pack PATH]` | Execute |
 | `readyagents resume RUN_ID [--approve NODE] [--reject NODE] [--decision-file FILE]` | Resume a paused or failed run |
 | `readyagents decide RUN_ID [--file FILE \| --node ID --decision approve]` | Inject an external approval decision and resume |
 | `readyagents runs list` | List persisted runs |
@@ -108,7 +109,7 @@ flowchart LR
 | `readyagents runs delete RUN_ID --yes` | Delete one local run record |
 | `readyagents runs gc --yes` | Prune succeeded/failed/cancelled runs (paused kept) |
 | `readyagents mcp serve` | Stdio MCP server (builtin tools) |
-| `readyagents packs` | List installed packs |
+| `readyagents packs [--pack PATH]` | List installed / local packs |
 | `readyagents version` | Print version |
 
 ## Examples (no keys unless noted)
@@ -140,7 +141,7 @@ flowchart LR
 - [Packs](docs/packs.md)
 - [CLI](docs/cli.md)
 - [Changelog](CHANGELOG.md)
-- [Release notes 0.7.0](RELEASE_NOTES.md)
+- [Release notes 0.8.0](RELEASE_NOTES.md)
 
 ## Install extras (still from this checkout)
 

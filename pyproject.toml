@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "readyagents"
-version = "0.7.0"
+version = "0.8.0"
 description = "Open-source Agent Workflow engine + MCP Toolkit (BYOK)"
 readme = "README.md"
 license = { text = "Apache-2.0" }

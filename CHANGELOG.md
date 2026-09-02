@@ -4,6 +4,24 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+## 0.8.0 — 2026-09-02
+
+### Added
+
+- **`readyagents eval PATH`.** Score a YAML/JSON `cases:` suite with the existing local harness. Exit 0 if every case passes, 1 if any fail. `--json` prints `ok`, `command`, `passed`, `failed`, and `results`. No network and no API keys.
+- **Local packs.** Repeatable `--pack PATH` and `READYAGENTS_PACK` load a `.py` pack (`get_pack()`) confined to the workspace. `examples/connector_demo.yaml` runs with `--pack examples/packs/connector_pack.py`.
+- **`list_dir` builtin.** Sandboxed directory listing (dotfiles skipped, entry cap, no `..` / symlink escape). `--dry-run` still lists. Example: `examples/list_dir.yaml`.
+- **`readyagents new` templates** `foreach`, `agent-tools`, and `gated`. Default remains `pipeline`. Overwrite refusal unchanged.
+- **Unified `--json` envelope.** Additive `ok` and `command` on validate, run, resume, packs, eval, and `runs show` (including missing ids). Existing keys stay. No Rich markup on JSON. Approval pause is still exit 2 and still includes `run_id`.
+
+### Docs
+
+- MCP docs lead with builtin `list_dir`, not `npx`. ReadyAgents remains Python-only.
+
+### Safety
+
+- Core still has no always-on listener, scheduler, hosted control plane, extra database, billing, or Node.js toolchain. This package is not on PyPI; install from a clone.
+
 ## 0.7.0 — 2026-08-27
 
 ### Added

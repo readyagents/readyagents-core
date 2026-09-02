@@ -1,3 +1,50 @@
+# ReadyAgents Core 0.8.0
+
+**Eval CLI, local packs, workspace `list_dir`, extra `new` templates, unified `--json`. Still local. No always-on. No Node.js. Not on PyPI.**
+
+0.8.0 is the engine cut after 0.7.0. Install from a clone (`pip install -e .`). This package is not on PyPI.
+
+## Why this release matters
+
+1. **`readyagents eval`** scores fixture suites without a network or API keys.
+2. **`--pack`** loads `examples/packs/connector_pack.py` without an entry point (path confined to the workspace).
+3. **`list_dir`** lists a workspace without an MCP filesystem server and without Node.js.
+4. **`readyagents new --template foreach|agent-tools|gated`** matches engine features already shipped.
+5. **`--json`** always includes `ok` and `command` on the operator-facing commands.
+
+## Try it (no API keys)
+
+```bash
+pip install -e .
+readyagents eval examples/eval/pass.yaml
+readyagents run examples/list_dir.yaml
+readyagents run examples/connector_demo.yaml --pack examples/packs/connector_pack.py --no-persist
+readyagents new demo --template foreach
+readyagents run examples/gated_write.yaml --approve gate --no-persist
+```
+
+## What we deliberately left out of core
+
+- PyPI publish (packaging is ready; install docs stay clone-only until a real upload)
+- Nested foreach, `http_request` POST, inbound listeners, streaming
+- Hosted control plane, extra databases, billing, always-on workers, Node.js
+
+## Compatibility
+
+- Python 3.11+
+- Existing 0.7.0 workflow YAML still runs. `--json` objects gain `ok` and `command`; previous keys remain.
+- CLI exit code **2** is still “paused for approval”.
+
+## Docs
+
+- [README](README.md)
+- [Changelog](CHANGELOG.md)
+- [CLI](docs/cli.md)
+- [MCP](docs/mcp.md)
+- [Packs](docs/packs.md)
+
+---
+
 # ReadyAgents Core 0.7.0
 
 **Honest composition resume and a real MCP client. Still local. No always-on.**

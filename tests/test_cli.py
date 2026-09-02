@@ -38,7 +38,7 @@ def test_help() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "0.7.0" in result.stdout
+    assert "0.8.0" in result.stdout
 
 
 def test_packs_none_installed() -> None:
