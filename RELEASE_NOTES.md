@@ -15,6 +15,10 @@
 ## Try it (no API keys)
 
 ```bash
+git clone https://github.com/readyagents/readyagents-core.git
+cd readyagents-core
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 readyagents eval examples/eval/pass.yaml
 readyagents run examples/list_dir.yaml
