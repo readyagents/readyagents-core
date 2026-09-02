@@ -202,15 +202,15 @@ The engine is still 0.3.0's. Install from a clone (`pip install -e .`). This pac
 
 # ReadyAgents Core 0.3.0
 
-**Enterprise hooks that still fit a small, local, YAML-first core.**
+**Local hooks that still fit a small, YAML-first core.**
 
-ReadyAgents Core remains the free engine: YAML workflows, BYOK, builtin tools, MCP optional, packs for extensions. **0.2.0** made runs durable and inspectable. **0.3.0** adds the operator controls companies ask for — cost, approvals from outside the CLI, secrets/RBAC/audit hooks, structured output, a local cache — without an always-on control plane.
+ReadyAgents Core remains the free engine: YAML workflows, BYOK, builtin tools, MCP optional, packs for extensions. **0.2.0** made runs durable and inspectable. **0.3.0** adds operator controls for a local clone — cost, approvals from outside the CLI, secrets/RBAC/audit hooks, structured output, a local cache — without an always-on control plane.
 
 Apache-2.0. No vendor keys. No hosted runtime in core.
 
 ## Why this release matters
 
-A careful team running agent graphs in production needs more than pause/resume:
+A careful engineer running agent graphs from a clone needs more than pause/resume:
 
 1. **See cost per node** and stop when a budget is hit.
 2. **Approve from a ticket or webhook pack**, not only `--approve` on a TTY.
