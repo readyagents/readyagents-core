@@ -527,7 +527,7 @@ def packs_cmd(
     if not found:
         console.print("No packs installed. Core runs without any packs.")
         console.print(
-            "See docs/packs.md for how a future readyagents-pack-continuous would plug in."
+            "readyagents packs --pack examples/packs/connector_pack.py"
         )
         return
     table = Table(title="Installed packs")
