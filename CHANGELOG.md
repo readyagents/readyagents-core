@@ -92,7 +92,7 @@ All notable changes to ReadyAgents Core.
 
 ### Safety
 
-- Core still has no always-on listener, scheduler, hosted control plane, extra database, or vendor secrets SDK. Those remain pack material.
+- Core still has no always-on listener, scheduler, hosted control plane, extra database, or vendor secrets SDK. Those remain waitlisted packs, not for sale.
 
 ## 0.2.0 — 2026-08-19
 
@@ -114,4 +114,4 @@ All notable changes to ReadyAgents Core.
 
 ### Safety
 
-- Core still has no always-on scheduler, control plane, distributed recovery, alerting, or billing. Those remain pack material.
+- Core still has no always-on scheduler, control plane, distributed recovery, alerting, or billing. Those remain waitlisted packs, not for sale.
