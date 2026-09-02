@@ -8,22 +8,6 @@ Tried it? Open an [I-ran-this](https://github.com/readyagents/readyagents-core/i
 
 This repository is the free core. You keep the provider account and the bill. The package is not on PyPI. Install from this clone.
 
-## What it does
-
-- Define agent workflows as YAML or JSON (nodes + edges)
-- Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, **include**, and **foreach** nodes. Agent nodes may declare a `tools:` allowlist for a bounded tool-use loop.
-- Persist after every node and **resume** a paused or failed run from the last successful node
-- Inspect past runs: `readyagents runs list` / `show` / `replay` / `report` (local HTML)
-- Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`)
-- Builtin tools with **zero extra servers**: `now`, `calc`, `json_get`, `list_dir`, `read_file`, `write_file`, optional `http_get`
-- Optional [MCP](https://modelcontextprotocol.io) client and server (`readyagents mcp serve`)
-- Extra node types and tools via Python entry points (`readyagents.packs`)
-- Per-node token/cost, budgets, model fallback, JSON logs
-- External approval injection (`readyagents decide`) and outbound pause notify
-- Secrets / RBAC / PII-redaction hooks and an append-only audit trail
-- Pydantic `output_schema` on agent nodes; opt-in local LLM cache
-- `readyagents.testing` helpers, recorded LLM mocks, and a tiny eval harness
-
 ## 60-second start
 
 Requires Python 3.11+. Current version is **0.8.0**. This package is **not on PyPI**. Install from this clone.
@@ -70,6 +54,22 @@ With a key in `.env` (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`):
 ```bash
 readyagents run examples/research_brief.yaml --input topic="agent workflows"
 ```
+
+## What it does
+
+- Define agent workflows as YAML or JSON (nodes + edges)
+- Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, **include**, and **foreach** nodes. Agent nodes may declare a `tools:` allowlist for a bounded tool-use loop.
+- Persist after every node and **resume** a paused or failed run from the last successful node
+- Inspect past runs: `readyagents runs list` / `show` / `replay` / `report` (local HTML)
+- Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`)
+- Builtin tools with **zero extra servers**: `now`, `calc`, `json_get`, `list_dir`, `read_file`, `write_file`, optional `http_get`
+- Optional [MCP](https://modelcontextprotocol.io) client and server (`readyagents mcp serve`)
+- Extra node types and tools via Python entry points (`readyagents.packs`)
+- Per-node token/cost, budgets, model fallback, JSON logs
+- External approval injection (`readyagents decide`) and outbound pause notify
+- Secrets / RBAC / PII-redaction hooks and an append-only audit trail
+- Pydantic `output_schema` on agent nodes; opt-in local LLM cache
+- `readyagents.testing` helpers, recorded LLM mocks, and a tiny eval harness
 
 ## Architecture
 
