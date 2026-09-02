@@ -32,7 +32,7 @@ Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (de
 
 ## `readyagents validate PATH`
 
-Loads YAML/JSON and validates the Pydantic schema (unique node ids, dangling `next` / edges, cycles over `next` / `then` / `else` / `edges`, required fields per type, unique parallel branch ids). Does not call tools or LLMs. `--json` prints `{ok, name, start, nodes}` (or `{ok: false, error, message}` on failure). The table shows `then:` / `else:` routing, not only `next`.
+Loads YAML/JSON and validates the Pydantic schema (unique node ids, dangling `next` / edges, cycles over `next` / `then` / `else` / `edges`, required fields per type, unique parallel branch ids). Does not call tools or LLMs. `--json` prints `{ok, command, name, start, nodes}` (or `{ok: false, command, error, message}` on failure). The table shows `then:` / `else:` routing, not only `next`.
 
 ## `readyagents eval PATH`
 
@@ -77,7 +77,7 @@ readyagents run examples/research_brief.yaml --no-persist
 
 Exit code `1` on validation or execution errors, including a missing workflow file (`ConfigError`). Exit code `2` is reserved for an **approval** node pausing for a decision. The CLI prints `ErrorClass: message` rather than a full traceback. Logs include `run=<id>` and `node=<id>`.
 
-Failed runs print the **node timeline**, `run_id`, and a `readyagents resume RUN_ID` hint (same idea as approval pauses). `--json` on pause/failure is an error envelope (`error`, `message`, `run_id`, `run`) so scripts can still recover the record. `resume` and `runs replay` accept `--json` too. JSON is written without Rich markup, so values like `[dry-run]` stay intact.
+Failed runs print the **node timeline**, `run_id`, and a `readyagents resume RUN_ID` hint (same idea as approval pauses). `--json` is an envelope with additive `ok` and `command` plus existing keys (`run_id`, `error`, `message`, `run`). Pause is exit 2 and still includes `run_id`. `resume` and `runs replay` accept `--json` too. JSON is written without Rich markup, so values like `[dry-run]` stay intact.
 
 State is persisted after **each** successful node (unless `--no-persist`).
 

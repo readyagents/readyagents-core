@@ -180,11 +180,12 @@ def validate(
     except ReadyAgentsError as exc:
         if as_json:
             _print_json(
-                {
-                    "ok": False,
-                    "error": type(exc).__name__,
-                    "message": str(exc),
-                }
+                _json_envelope(
+                    "validate",
+                    ok=False,
+                    error=type(exc).__name__,
+                    message=str(exc),
+                )
             )
             raise typer.Exit(code=1) from exc
         _fail(exc)
@@ -200,13 +201,14 @@ def validate(
     ]
     if as_json:
         _print_json(
-            {
-                "ok": True,
-                "name": workflow.name,
-                "start": workflow.start,
-                "node_count": len(workflow.nodes),
-                "nodes": nodes,
-            }
+            _json_envelope(
+                "validate",
+                ok=True,
+                name=workflow.name,
+                start=workflow.start,
+                node_count=len(workflow.nodes),
+                nodes=nodes,
+            )
         )
         return
     table = Table(title=f"Valid: {workflow.name}")
@@ -238,27 +240,27 @@ def eval_cmd(
     except ReadyAgentsError as extra:
         if as_json:
             _print_json(
-                {
-                    "ok": False,
-                    "command": "eval",
-                    "error": type(extra).__name__,
-                    "message": str(extra),
-                }
+                _json_envelope(
+                    "eval",
+                    ok=False,
+                    error=type(extra).__name__,
+                    message=str(extra),
+                )
             )
             raise typer.Exit(code=1) from extra
         _fail(extra)
     if as_json:
         _print_json(
-            {
-                "ok": report.ok,
-                "command": "eval",
-                "passed": report.passed,
-                "failed": report.failed,
-                "results": [
+            _json_envelope(
+                "eval",
+                ok=report.ok,
+                passed=report.passed,
+                failed=report.failed,
+                results=[
                     {"name": row.name, "passed": row.passed, "reason": row.reason}
                     for row in report.results
                 ],
-            }
+            )
         )
     else:
         for row in report.results:
@@ -369,13 +371,13 @@ def run(
             )
     except KeyboardInterrupt:
         if as_json:
-            _print_json({"error": "cancelled", "status": "cancelled"})
+            _print_json(_json_envelope("run", ok=False, error="cancelled", status="cancelled"))
         else:
             err_console.print("[yellow]cancelled[/yellow]")
         raise typer.Exit(code=1) from None
     except ReadyAgentsError as extra:
-        _emit_run_exception(extra, as_json=as_json, persist=persist)
-    _emit_run(state, as_json=as_json)
+        _emit_run_exception(extra, as_json=as_json, persist=persist, command="run")
+    _emit_run(state, as_json=as_json, command="run")
 
 
 @app.command("resume")
@@ -432,13 +434,13 @@ def resume_cmd(
         )
     except KeyboardInterrupt:
         if as_json:
-            _print_json({"error": "cancelled", "status": "cancelled"})
+            _print_json(_json_envelope("resume", ok=False, error="cancelled", status="cancelled"))
         else:
             err_console.print("[yellow]cancelled[/yellow]")
         raise typer.Exit(code=1) from None
     except ReadyAgentsError as extra:
-        _emit_run_exception(extra, as_json=as_json, persist=persist)
-    _emit_run(state, as_json=as_json)
+        _emit_run_exception(extra, as_json=as_json, persist=persist, command="resume")
+    _emit_run(state, as_json=as_json, command="resume")
 
 
 @app.command("decide")
@@ -487,8 +489,8 @@ def decide_cmd(
             actor=actor,
         )
     except ReadyAgentsError as exc:
-        _emit_run_exception(exc, as_json=as_json, persist=persist)
-    _emit_run(state, as_json=as_json)
+        _emit_run_exception(exc, as_json=as_json, persist=persist, command="decide")
+    _emit_run(state, as_json=as_json, command="decide")
 
 
 @app.command("packs")
@@ -503,21 +505,23 @@ def packs_cmd(
     except ReadyAgentsError as exc:
         if as_json:
             _print_json(
-                {
-                    "ok": False,
-                    "error": type(exc).__name__,
-                    "message": str(exc),
-                }
+                _json_envelope(
+                    "packs",
+                    ok=False,
+                    error=type(exc).__name__,
+                    message=str(exc),
+                )
             )
             raise typer.Exit(code=1) from exc
         _fail(exc)
         return
     if as_json:
         _print_json(
-            {
-                "ok": True,
-                "packs": [{"name": pack.name, "version": pack.version} for pack in found],
-            }
+            _json_envelope(
+                "packs",
+                ok=True,
+                packs=[{"name": pack.name, "version": pack.version} for pack in found],
+            )
         )
         return
     if not found:
@@ -652,8 +656,8 @@ def runs_replay(
             no_cache=no_cache,
         )
     except ReadyAgentsError as exc:
-        _emit_run_exception(exc, as_json=as_json, persist=persist)
-    _emit_run(state, as_json=as_json)
+        _emit_run_exception(exc, as_json=as_json, persist=persist, command="replay")
+    _emit_run(state, as_json=as_json, command="replay")
 
 
 @runs_app.command("delete")
@@ -733,18 +737,19 @@ def _show_run(run_id: str, *, as_json: bool = False) -> None:
     except ReadyAgentsError as exc:
         if as_json:
             _print_json(
-                {
-                    "ok": False,
-                    "error": type(exc).__name__,
-                    "message": str(exc),
-                    "run_id": run_id,
-                }
+                _json_envelope(
+                    "runs show",
+                    ok=False,
+                    error=type(exc).__name__,
+                    message=str(exc),
+                    run_id=run_id,
+                )
             )
             raise typer.Exit(code=1) from exc
         _fail(exc)
         return
     if as_json:
-        _print_json(state.to_record())
+        _print_json(_json_envelope("runs show", ok=True, **state.to_record()))
         return
     console.print(f"run_id: {state.run_id}")
     console.print(f"workflow: {state.workflow_name}")
@@ -781,6 +786,14 @@ def _print_json(payload: object) -> None:
     typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def _json_envelope(command: str, *, ok: bool, **fields: Any) -> dict[str, Any]:
+    """Additive JSON envelope: existing keys stay, ok/command always win."""
+    payload = dict(fields)
+    payload["ok"] = ok
+    payload["command"] = command
+    return payload
+
+
 def _node_routing(node: Any) -> str:
     """Compact then/else/next for the validate table (else was previously dropped)."""
     bits: list[str] = []
@@ -798,9 +811,15 @@ def _state_from_exc(exc: BaseException) -> RunState | None:
     return state if isinstance(state, RunState) else None
 
 
-def _emit_run(state: RunState, *, as_json: bool) -> None:
+def _emit_run(state: RunState, *, as_json: bool, command: str = "run") -> None:
     if as_json:
-        _print_json(state.to_record())
+        _print_json(
+            _json_envelope(
+                command,
+                ok=state.status == "succeeded",
+                **state.to_record(),
+            )
+        )
     else:
         _print_run(state)
         if state.status == "succeeded":
@@ -818,7 +837,9 @@ def _emit_run(state: RunState, *, as_json: bool) -> None:
         raise typer.Exit(code=1)
 
 
-def _emit_run_exception(exc: ReadyAgentsError, *, as_json: bool, persist: bool) -> NoReturn:
+def _emit_run_exception(
+    exc: ReadyAgentsError, *, as_json: bool, persist: bool, command: str = "run"
+) -> NoReturn:
     """Print a paused or failed run (JSON or tables) and exit. Never returns."""
     if isinstance(exc, ApprovalRequired):
         state = _state_from_exc(exc)
@@ -833,7 +854,7 @@ def _emit_run_exception(exc: ReadyAgentsError, *, as_json: bool, persist: bool) 
             }
             if state is not None:
                 payload["run"] = state.to_record()
-            _print_json(payload)
+            _print_json(_json_envelope(command, ok=False, **payload))
         else:
             _print_paused(exc)
         raise typer.Exit(code=2) from exc
@@ -849,7 +870,7 @@ def _emit_run_exception(exc: ReadyAgentsError, *, as_json: bool, persist: bool) 
         }
         if state is not None:
             payload["run"] = state.to_record()
-        _print_json(payload)
+        _print_json(_json_envelope(command, ok=False, **payload))
         raise typer.Exit(code=1) from exc
 
     if state is not None:

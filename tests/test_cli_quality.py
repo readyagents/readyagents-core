@@ -81,9 +81,11 @@ def test_validate_shows_else_routing() -> None:
 def test_validate_json_ok() -> None:
     result = runner.invoke(app, ["validate", "examples/calc_pipeline.yaml", "--json"])
     assert result.exit_code == 0, result.stdout + result.stderr
+    assert "\x1b" not in result.stdout
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
     assert data["ok"] is True
+    assert data["command"] == "validate"
     assert data["name"] == "calc_pipeline"
     assert data["start"]
     assert data["node_count"] >= 1
@@ -114,6 +116,7 @@ nodes:
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
     assert data["ok"] is False
+    assert data["command"] == "validate"
     assert data["error"] == "WorkflowError"
     assert "Cycle" in data["message"]
 
@@ -441,10 +444,13 @@ def test_run_json_paused_approval() -> None:
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
     assert data["error"] == "ApprovalRequired"
+    assert data["ok"] is False
+    assert data["command"] == "run"
     assert data["status"] == "paused"
     assert data["node_id"] == "gate"
     assert data["run_id"]
     assert data.get("run", {}).get("status") == "paused"
+    assert "\x1b" not in result.stdout
 
 
 def test_run_json_preserves_dry_run_markup() -> None:
@@ -695,9 +701,11 @@ def test_mcp_serve_invokes_stdio(monkeypatch) -> None:
 def test_packs_json_empty() -> None:
     result = runner.invoke(app, ["packs", "--json"])
     assert result.exit_code == 0, result.stdout + result.stderr
+    assert "\x1b" not in result.stdout
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
     assert data["ok"] is True
+    assert data["command"] == "packs"
     assert data["packs"] == []
 
 
@@ -716,6 +724,7 @@ def test_runs_show_json_missing_id(tmp_path: Path, monkeypatch) -> None:
     data = _json_from_cli(result.stdout)
     assert isinstance(data, dict)
     assert data["ok"] is False
+    assert data["command"] == "runs show"
     assert data["error"] == "ConfigError"
     assert data["run_id"] == "does-not-exist"
     assert "not found" in data["message"].lower()
@@ -758,6 +767,40 @@ def test_eval_json_fail_envelope() -> None:
     assert data["command"] == "eval"
     assert data["failed"] >= 1
     assert data["results"]
+
+
+def test_json_envelope_run_resume_eval() -> None:
+    ran = runner.invoke(app, ["run", "examples/calc_pipeline.yaml", "--json", "--no-persist"])
+    assert ran.exit_code == 0, ran.stdout + ran.stderr
+    assert "\x1b" not in ran.stdout
+    data = _json_from_cli(ran.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is True
+    assert data["command"] == "run"
+    assert data["status"] == "succeeded"
+    assert data["run_id"]
+    paused = runner.invoke(app, ["run", "examples/approval_gate.yaml", "--json"])
+    assert paused.exit_code == 2
+    pdata = _json_from_cli(paused.stdout)
+    assert pdata["ok"] is False
+    assert pdata["command"] == "run"
+    assert pdata["run_id"]
+    resumed = runner.invoke(
+        app, ["resume", pdata["run_id"], "--approve", "gate", "--json", "--no-persist"]
+    )
+    assert resumed.exit_code == 0, resumed.stdout + resumed.stderr
+    rdata = _json_from_cli(resumed.stdout)
+    assert rdata["ok"] is True
+    assert rdata["command"] == "resume"
+    assert rdata["run_id"] == pdata["run_id"]
+    ev = runner.invoke(app, ["eval", "examples/eval/pass.yaml", "--json"])
+    assert ev.exit_code == 0, ev.stdout + ev.stderr
+    edata = _json_from_cli(ev.stdout)
+    assert edata["ok"] is True
+    assert edata["command"] == "eval"
+    assert "passed" in edata
+    assert "failed" in edata
+    assert "results" in edata
 
 
 def test_eval_help_lists_json() -> None:
