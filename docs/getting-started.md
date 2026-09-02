@@ -31,23 +31,6 @@ pip install -e ".[all]"
 
 Agent nodes need a key in `.env` after you install the matching extra.
 
-## Configure BYOK
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set the key you actually have:
-
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-
-You do not have to pick OpenAI. If the agent node has no `model:` and you set only one key, the engine uses that provider.
-
-Optionally pin `READYAGENTS_DEFAULT_MODEL` (`openai:gpt-4o-mini` or `anthropic:claude-sonnet-4-5`).
-
-ReadyAgents never ships with vendor keys. You bring your own.
-
 ## First run (no keys)
 
 ```bash
@@ -81,6 +64,23 @@ readyagents run examples/fanout_gate.yaml --approve gate
 readyagents run examples/include_demo.yaml
 readyagents run examples/multi_gate.yaml --approve first --approve second
 ```
+
+## Configure BYOK
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set the key you actually have:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+
+You do not have to pick OpenAI. If the agent node has no `model:` and you set only one key, the engine uses that provider.
+
+Optionally pin `READYAGENTS_DEFAULT_MODEL` (`openai:gpt-4o-mini` or `anthropic:claude-sonnet-4-5`).
+
+ReadyAgents never ships with vendor keys. You bring your own.
 
 ## LLM examples
 
