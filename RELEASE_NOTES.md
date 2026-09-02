@@ -214,7 +214,7 @@ A careful engineer running agent graphs from a clone needs more than pause/resum
 
 1. **See cost per node** and stop when a budget is hit.
 2. **Approve from a ticket or webhook pack**, not only `--approve` on a TTY.
-3. **Ship the wheel** (PyPI-ready) and a one-service Dockerfile.
+3. **Ship the wheel** (local sdist/wheel, not on PyPI) and a one-service Dockerfile.
 4. **Hook secrets, RBAC, and an append-only audit log** without vendoring Vault/AWS.
 5. **Validate LLM JSON with Pydantic**, cache identical calls, and test workflows offline.
 
