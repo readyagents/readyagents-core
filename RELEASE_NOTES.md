@@ -194,7 +194,7 @@ readyagents run examples/approval_gate.yaml
 
 - CHANGELOG Unreleased no longer lists items already in 0.3.0 (#24)
 - first-ten-minutes matches README: `readyagents new my-flow` (default is pipeline) (#25)
-- NEXT leftover marks extras, size caps, DNS rebind, parallel timeout/retry, packs JSON, and Makefile/CONTRIBUTING smoke as shipped (#26)
+- Leftover marks extras, size caps, DNS rebind, parallel timeout/retry, packs JSON, and Makefile/CONTRIBUTING smoke as shipped (#26)
 
 The engine is still 0.3.0's. Install from a clone (`pip install -e .`). This package is not on PyPI.
 
