@@ -150,6 +150,7 @@ Stdio MCP server. Requires `pip install -e ".[mcp]"` from this checkout. See [mc
 ## `readyagents packs`
 
 Lists packs discovered via entry points. Empty when only core is installed. `--json` prints `{ok, packs}` (or `{ok: false, error, message}` if a pack fails to load).
+A local `.py` loads with `--pack PATH`, for example `readyagents packs --pack examples/packs/connector_pack.py`.
 
 ## `readyagents version`
 

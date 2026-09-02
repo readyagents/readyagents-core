@@ -59,6 +59,7 @@ Run records are written after each node. Resume a paused or failed run with `rea
 ## Extension: packs
 
 Core is complete on its own. A pack is an installed Python package that exposes an entry point in group `readyagents.packs`. It can register tools, node types, and bundled workflows. See [packs.md](packs.md).
+A local `.py` loads with `--pack PATH`, for example `readyagents packs --pack examples/packs/connector_pack.py`.
 
 ## MCP
 
