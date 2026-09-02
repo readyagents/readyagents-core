@@ -8,6 +8,7 @@ No API keys. Current version is **0.8.0**. The package is **not on PyPI** — in
 readyagents run examples/calc_pipeline.yaml
 readyagents runs list
 readyagents runs report <run_id>
+readyagents run examples/list_dir.yaml
 ```
 
 `calc_pipeline` is builtin tools only (`calc`, `now`, `json_get`). The HTML report is local. Nothing is uploaded.
