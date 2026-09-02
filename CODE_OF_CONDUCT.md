@@ -43,9 +43,11 @@ is officially representing the community in public spaces.
 
 ## Enforcement
 
-Report unacceptable behavior to the maintainers via GitHub (organization
-[readyagents](https://github.com/readyagents)). All complaints will be reviewed
-promptly and fairly.
+Report unacceptable behavior to the maintainers via GitHub (account
+[readyagents](https://github.com/readyagents), a User, not an Organization).
+All complaints will be reviewed promptly and fairly.
+
+Security reports go to [SECURITY.md](SECURITY.md) private vulnerability reporting.
 
 ## Attribution
 
