@@ -24,8 +24,8 @@ Write a starter project: `workflow.yaml`, `README.md`, and `.env.example`. Refus
 ```bash
 readyagents new my-flow
 readyagents run my-flow/workflow.yaml
-readyagents new gated --template approval
-readyagents run gated/workflow.yaml --approve gate
+readyagents new demo --template gated
+readyagents run demo/workflow.yaml --approve gate
 ```
 
 Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (default; calc/json/condition), `review` (read_file + approval), `foreach`, `agent-tools`, `gated`.
