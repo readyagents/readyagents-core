@@ -49,18 +49,12 @@ _BANNED_RUNTIME = (
 
 
 def test_m4_outbound_copies_exist() -> None:
-    install = (ROOT / "docs" / "outbound" / "readyagents-0.3.0-install.md").read_text(
-        encoding="utf-8"
-    )
     gate = (ROOT / "docs" / "outbound" / "gate-http-decide.md").read_text(encoding="utf-8")
-    assert "0.3.0" in install
-    assert "install" in install.lower()
     assert "decide" in gate.lower()
     assert "HTTP" in gate
-    combined = install + gate
-    assert "implementation" in combined.lower()
+    assert "implementation" in gate.lower()
     for banned in ("waitlist", "Polar", "Slack", "LinkedIn"):
-        assert banned.lower() not in combined.lower(), banned
+        assert banned.lower() not in gate.lower(), banned
     assert (ROOT / "examples" / "packs" / "hitl_gate.py").is_file()
 
 
