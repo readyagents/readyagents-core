@@ -15,7 +15,7 @@ This repository is the free core. You keep the provider account and the bill. Th
 - Persist after every node and **resume** a paused or failed run from the last successful node
 - Inspect past runs: `readyagents runs list` / `show` / `replay` / `report` (local HTML)
 - Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`)
-- Builtin tools with **zero extra servers**: `now`, `calc`, `json_get`, `read_file`, `write_file`, optional `http_get`
+- Builtin tools with **zero extra servers**: `now`, `calc`, `json_get`, `list_dir`, `read_file`, `write_file`, optional `http_get`
 - Optional [MCP](https://modelcontextprotocol.io) client and server (`readyagents mcp serve`)
 - Extra node types and tools via Python entry points (`readyagents.packs`)
 - Per-node token/cost, budgets, model fallback, JSON logs
@@ -127,6 +127,7 @@ flowchart LR
 | `examples/agent_tools.yaml` | Agent `tools: [calc]` (needs a key; `--dry-run` is keyless) |
 | `examples/foreach_calc.yaml` | Sequential foreach + `calc` (no keys) |
 | `examples/json_mutate.yaml` | `json_set` / `json_merge` (no keys) |
+| `examples/list_dir.yaml` | Builtin `list_dir` (no keys, no MCP, no Node) |
 
 ## Docs
 

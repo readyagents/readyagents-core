@@ -11,6 +11,7 @@ from readyagents.mcp.builtin import (
     tool_json_get,
     tool_json_merge,
     tool_json_set,
+    tool_list_dir,
     tool_now,
     tool_read_file,
     tool_write_file,
@@ -118,6 +119,78 @@ def test_write_file_is_atomic_and_nested(tmp_path: Path) -> None:
     tool_write_file("a/b/out.txt", "replaced", workspace=tmp_path)
     assert target.read_text(encoding="utf-8") == "replaced"
     assert list(tmp_path.rglob(".*.tmp")) == []
+
+
+def test_list_dir_skips_dotfiles_and_caps(tmp_path: Path) -> None:
+    (tmp_path / "a.txt").write_text("a", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("bb", encoding="utf-8")
+    (tmp_path / ".secret").write_text("nope", encoding="utf-8")
+    (tmp_path / "sub").mkdir()
+    rows = tool_list_dir(".", workspace=tmp_path)
+    names = [row["name"] for row in rows]
+    assert "a.txt" in names
+    assert "b.txt" in names
+    assert "sub" in names
+    assert ".secret" not in names
+    by_name = {row["name"]: row for row in rows}
+    assert by_name["a.txt"]["type"] == "file"
+    assert by_name["a.txt"]["size"] == 1
+    assert by_name["sub"]["type"] == "dir"
+    hidden = tool_list_dir(".", workspace=tmp_path, include_hidden=True)
+    assert ".secret" in [row["name"] for row in hidden]
+    capped = tool_list_dir(".", workspace=tmp_path, max_entries=1)
+    assert len(capped) == 1
+
+
+def test_list_dir_refuses_escape_and_symlink(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "inside.txt").write_text("ok", encoding="utf-8")
+    with pytest.raises(ToolError, match="outside"):
+        tool_list_dir("../", workspace=workspace)
+    with pytest.raises(ToolError, match="outside"):
+        tool_list_dir(str(tmp_path), workspace=workspace)
+    victim = tmp_path / "outside_dir"
+    victim.mkdir()
+    (victim / "secret.txt").write_text("secret", encoding="utf-8")
+    link = workspace / "leak"
+    try:
+        link.symlink_to(victim)
+    except OSError:
+        pytest.skip("symlinks not supported")
+    with pytest.raises(ToolError, match="outside"):
+        tool_list_dir("leak", workspace=workspace)
+    rows = tool_list_dir(".", workspace=workspace)
+    assert "leak" not in [row["name"] for row in rows]
+    assert "inside.txt" in [row["name"] for row in rows]
+
+
+def test_list_dir_example_and_dry_run(examples_dir: Path, tmp_settings, tmp_path: Path) -> None:
+    (tmp_path / "visible.txt").write_text("x", encoding="utf-8")
+    (tmp_path / ".hidden").write_text("y", encoding="utf-8")
+    state = run_workflow_file(
+        examples_dir / "list_dir.yaml",
+        settings=tmp_settings,
+        persist=False,
+    )
+    assert state.status == "succeeded"
+    assert str(state.output_keys["summary"]).startswith("list_dir ok:")
+    count = int(str(state.output_keys["summary"]).split(":")[-1])
+    assert count >= 1
+    names = [row["name"] for row in state.output_keys["entries"]]
+    assert "visible.txt" in names
+    assert ".hidden" not in names
+    dry = run_workflow_file(
+        examples_dir / "list_dir.yaml",
+        settings=tmp_settings,
+        persist=False,
+        dry_run=True,
+    )
+    assert dry.status == "succeeded"
+    assert "list_dir ok:" in str(dry.output_keys["summary"])
+    assert "[dry-run]" not in str(dry.output_keys["summary"])
+    dry_names = [row["name"] for row in dry.output_keys["entries"]]
+    assert "visible.txt" in dry_names
 
 
 def test_file_sandbox_symlink_escape(tmp_path: Path) -> None:
@@ -317,6 +390,7 @@ def test_default_registry_includes_builtins(tmp_path: Path) -> None:
         "json_get",
         "json_set",
         "json_merge",
+        "list_dir",
         "read_file",
         "write_file",
         "http_get",

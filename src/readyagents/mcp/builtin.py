@@ -39,6 +39,7 @@ _MAX_HTTP_BYTES = 1_000_000
 _MAX_HTTP_REDIRECTS = 5
 _MAX_POW_EXP = 32
 _MAX_FILE_BYTES = 1_000_000
+_MAX_LIST_DIR_ENTRIES = 500
 _MAX_JSON_BYTES = 1_000_000
 _MAX_CALC_CHARS = 256
 _JSON_REFUSED_SEGMENTS = frozenset({"constructor", "prototype"})
@@ -112,6 +113,24 @@ def builtin_tools(*, allow_http: bool, workspace: Path) -> list[Tool]:
                 "required": ["data", "path", "value"],
             },
             handler=tool_json_merge,
+        ),
+        FunctionTool(
+            name="list_dir",
+            description="List a directory sandboxed to the workflow workspace (dotfiles skipped).",
+            schema={
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "include_hidden": {"type": "boolean"},
+                    "max_entries": {"type": "integer"},
+                },
+            },
+            handler=lambda path=".", include_hidden=False, max_entries=200: tool_list_dir(
+                path,
+                workspace=workspace,
+                include_hidden=include_hidden,
+                max_entries=max_entries,
+            ),
         ),
         FunctionTool(
             name="read_file",
@@ -540,6 +559,66 @@ def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_unspecified
         or not ip.is_global
     )
+
+
+def tool_list_dir(
+    path: str = ".",
+    *,
+    workspace: Path,
+    include_hidden: bool = False,
+    max_entries: int = 200,
+) -> list[dict[str, Any]]:
+    """List a workspace directory. Dotfiles skipped unless include_hidden."""
+    target = _sandbox_dir(path, workspace)
+    try:
+        cap = int(max_entries)
+    except (TypeError, ValueError) as extra:
+        raise ToolError(f"list_dir: max_entries must be an integer: {extra}") from extra
+    if cap < 1:
+        raise ToolError("list_dir: max_entries must be >= 1")
+    cap = min(cap, _MAX_LIST_DIR_ENTRIES)
+    hidden = bool(include_hidden)
+    rows: list[dict[str, Any]] = []
+    try:
+        names = sorted(target.iterdir(), key=lambda p: p.name.lower())
+    except OSError as extra:
+        raise ToolError(f"list_dir: could not list {path}: {extra}") from extra
+    for child in names:
+        if not hidden and child.name.startswith("."):
+            continue
+        try:
+            resolved_child = child.resolve()
+            if not resolved_child.is_relative_to(workspace):
+                continue
+            is_dir = resolved_child.is_dir()
+            is_file = resolved_child.is_file()
+            size = resolved_child.stat().st_size if is_file else 0
+        except OSError:
+            continue
+        kind = "dir" if is_dir else "file" if is_file else "other"
+        rows.append({"name": child.name, "type": kind, "size": int(size)})
+        if len(rows) >= cap:
+            break
+    return rows
+
+
+def _sandbox_dir(path: str, workspace: Path) -> Path:
+    """Resolve a directory path inside workspace (workspace root is allowed)."""
+    workspace = Path(workspace).resolve()
+    text = str(path).strip() or "."
+    if "\x00" in text:
+        raise ToolError("Path contains invalid characters")
+    if text == "..":
+        raise ToolError("Path must stay inside the workspace")
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = workspace / candidate
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(workspace):
+        raise ToolError(f"Path '{path}' is outside the workspace")
+    if not resolved.is_dir():
+        raise ToolError(f"list_dir: not a directory: {path}")
+    return resolved
 
 
 def tool_read_file(path: str, *, workspace: Path) -> str:

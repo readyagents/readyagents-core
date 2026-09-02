@@ -1,0 +1,21 @@
+name: list_dir
+version: "1"
+description: >
+  Keyless: list the workflow workspace with builtin list_dir (no MCP, no Node).
+  Run: readyagents run examples/list_dir.yaml
+  Dry-run still lists: readyagents run examples/list_dir.yaml --dry-run
+
+start: listing
+nodes:
+  - id: listing
+    type: tool
+    tool: list_dir
+    arguments:
+      path: "."
+    output_key: entries
+    next: wrap
+
+  - id: wrap
+    type: transform
+    template: "list_dir ok: {{entries | len}}"
+    output_key: summary

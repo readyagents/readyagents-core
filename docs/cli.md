@@ -62,7 +62,7 @@ readyagents run examples/research_brief.yaml --no-persist
 | Flag | Meaning |
 | --- | --- |
 | `--input KEY=VALUE` / `-i` | Repeatable. `true`/`false`/`null` and integers are coerced |
-| `--dry-run` | No LLM, no `http_get` or `write_file` (including when an agent allowlist names them); templates still interpolate. Read-only tools (`now`, `calc`, `json_get`, `read_file`) still run. |
+| `--dry-run` | No LLM, no `http_get` or `write_file` (including when an agent allowlist names them); templates still interpolate. Read-only tools (`now`, `calc`, `json_get`, `read_file`, `list_dir`) still run. |
 | `--no-persist` | Skip writing `.readyagents/runs/<id>.json` |
 | `--approve NODE` | Supply an approval-node decision (repeatable) |
 | `--reject NODE` | Reject an approval node (repeatable) |

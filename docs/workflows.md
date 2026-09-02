@@ -113,7 +113,7 @@ Optional agent fields:
   output_key: total
 ```
 
-Builtin tools: `now`, `calc`, `json_get`, `json_set`, `json_merge`, `read_file`, `write_file`, `http_get` (opt-in).
+Builtin tools: `now`, `calc`, `json_get`, `json_set`, `json_merge`, `list_dir`, `read_file`, `write_file`, `http_get` (opt-in).
 
 MCP tools are named `server.tool` (and also the bare tool name if unique).
 
@@ -272,3 +272,4 @@ readyagents runs replay <run_id>
 | `examples/agent_tools.yaml` | Yes (dry-run: no) | Agent `tools: [calc]` allowlist |
 | `examples/foreach_calc.yaml` | No | Sequential `foreach` + `calc` |
 | `examples/json_mutate.yaml` | No | `json_set` / `json_merge` |
+| `examples/list_dir.yaml` | No | Builtin `list_dir` (no MCP / no Node) |

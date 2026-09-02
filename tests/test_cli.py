@@ -97,6 +97,17 @@ def test_pack_path_escape_refused(tmp_path: Path, monkeypatch) -> None:
     clear_settings_cache()
 
 
+def test_run_list_dir_example() -> None:
+    result = runner.invoke(app, ["run", "examples/list_dir.yaml", "--no-persist"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "succeeded" in result.stdout
+    assert "list_dir ok:" in result.stdout
+    dry = runner.invoke(app, ["run", "examples/list_dir.yaml", "--dry-run", "--no-persist"])
+    assert dry.exit_code == 0, dry.stdout + dry.stderr
+    assert "list_dir ok:" in dry.stdout
+    assert "succeeded" in dry.stdout
+
+
 def test_run_calc_pipeline() -> None:
     result = runner.invoke(app, ["run", "examples/calc_pipeline.yaml", "--no-persist"])
     assert result.exit_code == 0, result.stdout + result.stderr
