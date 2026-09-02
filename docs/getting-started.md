@@ -42,6 +42,7 @@ This uses `calc`, `now`, `json_get`, a transform, and a condition. It writes a r
 ```bash
 readyagents runs list
 readyagents runs show <run_id>
+readyagents eval examples/eval/pass.yaml
 ```
 
 Scaffold a local starter (workflow + README + `.env.example`):
