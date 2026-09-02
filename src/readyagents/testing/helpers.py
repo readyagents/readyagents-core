@@ -1,4 +1,4 @@
-"""Helpers that wrap the same engine path production uses."""
+"""Helpers that wrap the same engine path the CLI uses."""
 
 from __future__ import annotations
 
