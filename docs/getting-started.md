@@ -43,6 +43,7 @@ This uses `calc`, `now`, `json_get`, a transform, and a condition. It writes a r
 readyagents runs list
 readyagents runs show <run_id>
 readyagents eval examples/eval/pass.yaml
+readyagents run examples/list_dir.yaml
 ```
 
 Scaffold a local starter (workflow + README + `.env.example`):
