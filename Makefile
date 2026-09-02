@@ -22,6 +22,7 @@ run-example:
 # Keyless example set used by CI: dry-run, resume, approval, parallel, include.
 smoke:
 	readyagents run examples/calc_pipeline.yaml --no-persist
+	readyagents run examples/list_dir.yaml --no-persist
 	readyagents run examples/approval_gate.yaml --approve gate --no-persist
 	readyagents run examples/fanout_gate.yaml --approve gate --no-persist
 	readyagents run examples/include_demo.yaml --no-persist
