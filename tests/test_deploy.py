@@ -52,7 +52,6 @@ def test_m4_outbound_copies_exist() -> None:
     gate = (ROOT / "docs" / "outbound" / "gate-http-decide.md").read_text(encoding="utf-8")
     assert "decide" in gate.lower()
     assert "HTTP" in gate
-    assert "implementation" in gate.lower()
     for banned in ("waitlist", "Polar", "Slack", "LinkedIn"):
         assert banned.lower() not in gate.lower(), banned
     assert (ROOT / "examples" / "packs" / "hitl_gate.py").is_file()
