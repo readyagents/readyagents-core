@@ -11,7 +11,7 @@ readyagents runs report <run_id>
 readyagents run examples/list_dir.yaml
 ```
 
-`calc_pipeline` is builtin tools only (`calc`, `now`, `json_get`). The HTML report is local. Nothing is uploaded.
+`calc_pipeline` and `list_dir` are builtin tools only (`calc`, `now`, `json_get`, `list_dir`). The HTML report is local. Nothing is uploaded.
 
 ## 2. Pause is not a crash
 
