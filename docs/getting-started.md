@@ -118,3 +118,4 @@ readyagents validate examples/code_review.yaml
 - [Workflow syntax](workflows.md)
 - [Configuration](configuration.md)
 - [MCP toolkit](mcp.md)
+- [CLI](cli.md)
