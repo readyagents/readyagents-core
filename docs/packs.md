@@ -60,10 +60,7 @@ def get_pack():
     return ContinuousPack()
 ```
 
-```bash
-pip install readyagents-pack-continuous
-readyagents packs
-```
+This pack is not published.
 
 The engine calls `discover_packs()` at run start and merges tools/node handlers. No change to core YAML is required except using the new tool or node type names.
 
