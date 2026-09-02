@@ -273,3 +273,5 @@ readyagents runs replay <run_id>
 | `examples/foreach_calc.yaml` | No | Sequential `foreach` + `calc` |
 | `examples/json_mutate.yaml` | No | `json_set` / `json_merge` |
 | `examples/list_dir.yaml` | No | Builtin `list_dir` (no MCP / no Node) |
+| `examples/eval/pass.yaml` | No | Keyless `readyagents eval` fixture suite |
+| `examples/connector_demo.yaml` | No | Local `--pack` connector (`examples/packs/connector_pack.py`) |
