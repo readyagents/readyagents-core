@@ -1,13 +1,12 @@
 # ReadyAgents Core
 
-Open-source **Agent Workflow engine + MCP Toolkit**. Bring your own API keys (BYOK).
+ReadyAgents is a free, self-hosted Apache-2.0 local one-shot agent workflow engine plus MCP toolkit: clone it, bring your own keys; always-on packs are waitlisted and not for sale.
 
-Tried it? Open an [I-ran-this](https://github.com/readyagents/readyagents-core/issues/new?template=i-ran-this.md) issue.
-We are not launching. We are listening.
+Site: [readyagents.dev](https://readyagents.dev). Repo: [github.com/readyagents/readyagents-core](https://github.com/readyagents/readyagents-core).
 
-This is the free core of [ReadyAgents](https://github.com/readyagents). Commercial **packs** (always-on / continuous systems, hosted control plane) sit on top of this engine. They are not required to run workflows.
+Tried it? Open an [I-ran-this](https://github.com/readyagents/readyagents-core/issues/new?template=i-ran-this.md) issue. We are not launching. We are listening.
 
-Package `readyagents` **0.7.0**. Packaging is PyPI-ready (sdist + wheel); this repo is still the install source until a publish.
+This repository is the free core. You keep the provider account and the bill. The package is not on PyPI. Install from this clone.
 
 ## What it does
 
@@ -161,14 +160,13 @@ make smoke
 ```
 
 
-## What is not in core
+## What is not in this repository
 
-These belong in **Premium Packs**, not this repository:
+Always-on packs are waitlisted and not for sale.
 
-- Always-on / continuous workers and schedulers
-- Hosted control plane, SSO, multi-tenant teams (RBAC **hooks** only)
-- Distributed recovery and remote run stores
-- Alerting, paging, billing
+Always-on / continuous workers and schedulers. Hosted control plane. Hosted recovery and remote run stores. SSO, multi-tenant teams, billing.
+
+The core has persist, resume, and approval pauses for a local one-shot. It does not run always-on.
 
 ## License
 
