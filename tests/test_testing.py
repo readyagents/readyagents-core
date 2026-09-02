@@ -4,7 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from readyagents.testing import EvalCase, RecordedLLM, ScriptedLLM, run_eval, run_workflow_spec
+from readyagents.errors import ConfigError
+from readyagents.testing import (
+    EvalCase,
+    RecordedLLM,
+    ScriptedLLM,
+    load_eval_suite,
+    run_eval,
+    run_workflow_spec,
+)
 
 
 def test_recorded_llm_replays_without_network(tmp_path: Path) -> None:
@@ -101,3 +109,60 @@ nodes:
     )
     assert report.ok
     report.assert_passing()
+
+
+def test_load_eval_suite_and_run_pass_fixture() -> None:
+    root = Path(__file__).resolve().parents[1]
+    cases = load_eval_suite(root / "examples" / "eval" / "pass.yaml")
+    assert cases
+    assert all(isinstance(row, EvalCase) for row in cases)
+    assert cases[0].name == "calc_pipeline"
+    report = run_eval(cases)
+    assert report.ok
+    report.assert_passing()
+
+
+def test_load_eval_suite_inline_workflow(tmp_path: Path) -> None:
+    suite = tmp_path / "inline.yaml"
+    suite.write_text(
+        """
+cases:
+  - name: inline
+    workflow:
+      name: tiny
+      nodes:
+        - id: t
+          type: transform
+          template: "hello-eval"
+          output_key: summary
+    expect_status: succeeded
+    expect_contains:
+      summary: hello-eval
+""",
+        encoding="utf-8",
+    )
+    cases = load_eval_suite(suite)
+    assert len(cases) == 1
+    assert isinstance(cases[0].workflow, dict)
+    report = run_eval(cases)
+    assert report.ok
+
+
+def test_load_eval_suite_empty_cases(tmp_path: Path) -> None:
+    path = tmp_path / "empty.yaml"
+    path.write_text("cases: []\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="no cases"):
+        load_eval_suite(path)
+
+
+def test_load_eval_suite_missing_file(tmp_path: Path) -> None:
+    missing = tmp_path / "nope.yaml"
+    with pytest.raises(ConfigError, match="not found"):
+        load_eval_suite(missing)
+
+
+def test_load_eval_suite_bad_shape(tmp_path: Path) -> None:
+    path = tmp_path / "bad.yaml"
+    path.write_text("- not: a-mapping\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="mapping"):
+        load_eval_suite(path)

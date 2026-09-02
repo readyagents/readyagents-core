@@ -721,6 +721,51 @@ def test_runs_show_json_missing_id(tmp_path: Path, monkeypatch) -> None:
     assert "not found" in data["message"].lower()
 
 
+def test_eval_json_missing_file(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["eval", str(tmp_path / "nope.yaml"), "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is False
+    assert data["command"] == "eval"
+    assert data["error"] == "ConfigError"
+    assert "message" in data
+    assert "nope.yaml" in data["message"]
+
+
+def test_eval_json_pass_envelope() -> None:
+    result = runner.invoke(app, ["eval", "examples/eval/pass.yaml", "--json"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is True
+    assert data["command"] == "eval"
+    assert data["passed"] >= 1
+    assert data["failed"] == 0
+    assert isinstance(data["results"], list)
+    row = data["results"][0]
+    assert "name" in row
+    assert "passed" in row
+    assert "reason" in row
+
+
+def test_eval_json_fail_envelope() -> None:
+    result = runner.invoke(app, ["eval", "examples/eval/fail.yaml", "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = _json_from_cli(result.stdout)
+    assert isinstance(data, dict)
+    assert data["ok"] is False
+    assert data["command"] == "eval"
+    assert data["failed"] >= 1
+    assert data["results"]
+
+
+def test_eval_help_lists_json() -> None:
+    result = runner.invoke(app, ["eval", "--help"])
+    assert result.exit_code == 0
+    assert "--json" in _plain(result.stdout)
+
+
 def test_runs_inspect_json_missing_id(tmp_path: Path, monkeypatch) -> None:
     clear_settings_cache()
     monkeypatch.chdir(tmp_path)

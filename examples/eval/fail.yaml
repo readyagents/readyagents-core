@@ -1,0 +1,8 @@
+# Intentional mismatch so the suite fails (CLI exit 1).
+# Run: readyagents eval examples/eval/fail.yaml
+cases:
+  - name: calc_pipeline
+    workflow: ../calc_pipeline.yaml
+    expect_status: succeeded
+    expect_outputs:
+      summary: this-must-not-match

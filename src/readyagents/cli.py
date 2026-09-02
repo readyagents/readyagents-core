@@ -17,6 +17,7 @@ from readyagents.errors import ApprovalRequired, ReadyAgentsError
 from readyagents.logging import configure_logging
 from readyagents.packs.loader import discover_packs
 from readyagents.scaffold import TEMPLATES, create_project
+from readyagents.testing.eval import load_eval_suite, run_eval
 from readyagents.workflow.runner import (
     load_workflow,
     replay_run,
@@ -211,6 +212,58 @@ def validate(
         table.add_row(node.id, str(node.type), _node_routing(node))
     console.print(table)
     console.print(f"[green]OK[/green] — {len(workflow.nodes)} node(s), start={workflow.start}")
+
+
+@app.command("eval")
+def eval_cmd(
+    path: Path = typer.Argument(
+        ...,
+        help="Eval suite YAML or JSON file.",
+    ),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the eval report as JSON on stdout (no tables).",
+    ),
+) -> None:
+    """Score fixture workflows from a suite file (no network, no API keys)."""
+    try:
+        cases = load_eval_suite(path)
+        report = run_eval(cases)
+    except ReadyAgentsError as extra:
+        if as_json:
+            _print_json(
+                {
+                    "ok": False,
+                    "command": "eval",
+                    "error": type(extra).__name__,
+                    "message": str(extra),
+                }
+            )
+            raise typer.Exit(code=1) from extra
+        _fail(extra)
+    if as_json:
+        _print_json(
+            {
+                "ok": report.ok,
+                "command": "eval",
+                "passed": report.passed,
+                "failed": report.failed,
+                "results": [
+                    {"name": row.name, "passed": row.passed, "reason": row.reason}
+                    for row in report.results
+                ],
+            }
+        )
+    else:
+        for row in report.results:
+            if row.passed:
+                console.print(f"[green]PASS[/green] {escape(row.name)}")
+            else:
+                console.print(f"[red]FAIL[/red] {escape(row.name)}: {escape(row.reason)}")
+        console.print(f"passed={report.passed} failed={report.failed}")
+    if not report.ok:
+        raise typer.Exit(code=1)
 
 
 @app.command()

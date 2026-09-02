@@ -34,6 +34,20 @@ Templates: `basic`, `approval`, `research` (parallel + approval), `pipeline` (de
 
 Loads YAML/JSON and validates the Pydantic schema (unique node ids, dangling `next` / edges, cycles over `next` / `then` / `else` / `edges`, required fields per type, unique parallel branch ids). Does not call tools or LLMs. `--json` prints `{ok, name, start, nodes}` (or `{ok: false, error, message}` on failure). The table shows `then:` / `else:` routing, not only `next`.
 
+## `readyagents eval PATH`
+
+Score fixture workflows from a suite file using the same local harness as `readyagents.testing.run_eval`. **No network and no API keys** — cases must be keyless fixtures (builtin tools, transforms, recorded/scripted LLM), not live vendors.
+
+```bash
+readyagents eval examples/eval/pass.yaml
+readyagents eval examples/eval/fail.yaml
+readyagents eval examples/eval/pass.yaml --json
+```
+
+The suite is YAML or JSON with a `cases:` list. Each case has `name`, `workflow` (a path relative to the suite file, or an inline workflow mapping), and optional `inputs`, `decisions`, `expect_status` (default `succeeded`), `expect_outputs`, and `expect_contains`. An empty `cases:` list is refused.
+
+Human output is one `PASS name` / `FAIL name: reason` line per case, then `passed=N failed=M`. `--json` prints `{ok, command, passed, failed, results}` with `command` `"eval"` and `results` as `{name, passed, reason}` rows. Exit `0` if every case passes, `1` if any fail or the suite cannot be loaded. A missing suite file is `ConfigError` (exit 1), same as a missing workflow; `--json` then prints `{ok: false, command: "eval", error, message}`.
+
 ## `readyagents run PATH`
 
 ```bash

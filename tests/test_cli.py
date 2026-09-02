@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -31,6 +32,7 @@ def test_help() -> None:
     assert result.exit_code == 0
     assert "run" in result.stdout
     assert "validate" in result.stdout
+    assert "eval" in result.stdout
 
 
 def test_version() -> None:
@@ -335,6 +337,52 @@ def test_dry_run_support_triage() -> None:
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "succeeded" in result.stdout
     assert "[dry-run]" in result.stdout
+
+
+def test_eval_pass_suite() -> None:
+    result = runner.invoke(app, ["eval", "examples/eval/pass.yaml"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "PASS" in result.stdout
+    assert "passed=" in result.stdout
+    assert "calc_pipeline" in result.stdout
+
+
+def test_eval_fail_suite() -> None:
+    result = runner.invoke(app, ["eval", "examples/eval/fail.yaml"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    assert "FAIL" in result.stdout + result.stderr
+
+
+def test_eval_pass_suite_json() -> None:
+    result = runner.invoke(app, ["eval", "examples/eval/pass.yaml", "--json"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    data = json.loads(result.stdout)
+    assert data["ok"] is True
+    assert data["command"] == "eval"
+    assert data["passed"] >= 1
+    assert data["failed"] == 0
+    assert isinstance(data["results"], list)
+    assert data["results"]
+    assert "name" in data["results"][0]
+    assert "passed" in data["results"][0]
+
+
+def test_eval_fail_suite_json() -> None:
+    result = runner.invoke(app, ["eval", "examples/eval/fail.yaml", "--json"])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    data = json.loads(result.stdout)
+    assert data["ok"] is False
+    assert data["command"] == "eval"
+    assert data["failed"] >= 1
+    assert data["results"]
+
+
+def test_eval_missing_file(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["eval", str(tmp_path / "nope.yaml")])
+    assert result.exit_code == 1, result.stdout + result.stderr
+    text = result.stdout + result.stderr
+    assert "ConfigError" in text
+    assert "nope.yaml" in text
 
 
 def test_dry_run_research_brief() -> None:

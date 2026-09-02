@@ -1,0 +1,8 @@
+# Keyless eval suite — no LLM, no API keys, no network.
+# Run: readyagents eval examples/eval/pass.yaml
+cases:
+  - name: calc_pipeline
+    workflow: ../calc_pipeline.yaml
+    expect_status: succeeded
+    expect_contains:
+      summary: calc_pipeline ok
