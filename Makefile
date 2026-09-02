@@ -24,6 +24,7 @@ smoke:
 	readyagents run examples/calc_pipeline.yaml --no-persist
 	readyagents run examples/list_dir.yaml --no-persist
 	readyagents eval examples/eval/pass.yaml
+	readyagents run examples/connector_demo.yaml --pack examples/packs/connector_pack.py --no-persist
 	readyagents run examples/approval_gate.yaml --approve gate --no-persist
 	readyagents run examples/fanout_gate.yaml --approve gate --no-persist
 	readyagents run examples/include_demo.yaml --no-persist
