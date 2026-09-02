@@ -34,7 +34,7 @@ HITL next: [docs/first-ten-minutes.md](docs/first-ten-minutes.md).
 - Run **agent**, **tool**, **condition**, **transform**, **approval**, **parallel**, **include**, and **foreach** nodes. Agent nodes may declare a `tools:` allowlist for a bounded tool-use loop.
 - Persist after every node and **resume** a paused or failed run from the last successful node
 - Inspect past runs: `readyagents runs list` / `show` / `replay` / `report` (local HTML)
-- Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`)
+- Scaffold a starter: `readyagents new my-flow` (`basic`, `approval`, `research`, `pipeline`, `review`, `foreach`, `agent-tools`, `gated`)
 - Builtin tools with **zero extra servers**: `now`, `calc`, `json_get`, `list_dir`, `read_file`, `write_file`, optional `http_get`
 - Optional [MCP](https://modelcontextprotocol.io) client and server (`readyagents mcp serve`)
 - Extra node types and tools via Python entry points (`readyagents.packs`)
