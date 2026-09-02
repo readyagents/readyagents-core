@@ -409,7 +409,7 @@ With keys, the existing research / triage / review examples still work. `--dry-r
 
 ## What we deliberately left out of core
 
-These belong in **Premium Packs**, not this repository:
+These belong in waitlisted packs, not for sale:
 
 - Always-on / continuous workers and schedulers
 - Hosted control plane, teams, SSO
