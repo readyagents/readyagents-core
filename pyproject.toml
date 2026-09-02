@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "readyagents"
 version = "0.8.0"
-description = "Open-source Agent Workflow engine + MCP Toolkit (BYOK)"
+description = "Local one-shot YAML/JSON agent workflow engine + MCP toolkit (BYOK). Not on PyPI."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
