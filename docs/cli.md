@@ -52,6 +52,7 @@ Human output is one `PASS name` / `FAIL name: reason` line per case, then `passe
 
 ```bash
 readyagents run examples/calc_pipeline.yaml
+readyagents run examples/list_dir.yaml
 readyagents run examples/approval_gate.yaml --approve gate
 readyagents run examples/research_brief.yaml --input topic="mcp servers"
 readyagents run examples/support_triage.yaml -i message="billing question"
