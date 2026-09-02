@@ -19,7 +19,7 @@ run-example:
 	readyagents run examples/approval_gate.yaml --approve gate
 	readyagents run examples/composed_gate.yaml --approve gate
 
-# Keyless example set used by CI: dry-run, resume, approval, parallel, include.
+# Keyless example set used by CI: list_dir, eval, dry-run, resume, approval, parallel, include.
 smoke:
 	readyagents run examples/calc_pipeline.yaml --no-persist
 	readyagents run examples/list_dir.yaml --no-persist
