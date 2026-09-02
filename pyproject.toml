@@ -48,7 +48,7 @@ dev = [
 readyagents = "readyagents.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/readyagents/readyagents-core"
+Homepage = "https://readyagents.dev/"
 Documentation = "https://github.com/readyagents/readyagents-core/tree/main/docs"
 Issues = "https://github.com/readyagents/readyagents-core/issues"
 Source = "https://github.com/readyagents/readyagents-core"
