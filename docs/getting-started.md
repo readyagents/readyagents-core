@@ -8,7 +8,9 @@
 
 ## Install
 
-This package is **not on PyPI**. Clone the repo and install from that checkout.
+Current version is **0.8.0**. This package is **not on PyPI**. Clone the repo and install from that checkout.
+
+First-run clip: [watch the 60-second run](https://www.youtube.com/watch?v=D69o_HTGNQk)
 
 ```bash
 git clone https://github.com/readyagents/readyagents-core.git

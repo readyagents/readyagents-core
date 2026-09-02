@@ -26,7 +26,9 @@ This repository is the free core. You keep the provider account and the bill. Th
 
 ## 60-second start
 
-Requires Python 3.11+.
+Requires Python 3.11+. Current version is **0.8.0**. This package is **not on PyPI**. Install from this clone.
+
+First-run clip: [watch the 60-second run](https://www.youtube.com/watch?v=D69o_HTGNQk)
 
 ```bash
 git clone https://github.com/readyagents/readyagents-core.git

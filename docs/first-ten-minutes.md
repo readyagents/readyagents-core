@@ -1,6 +1,6 @@
 # First ten minutes
 
-No API keys. The package is **not on PyPI** — install from a clone (`pip install -e .`) as in the [README](../README.md).
+No API keys. Current version is **0.8.0**. The package is **not on PyPI** — install from a clone (`pip install -e .`) as in the [README](../README.md).
 
 ## 1. Prove the engine works
 
