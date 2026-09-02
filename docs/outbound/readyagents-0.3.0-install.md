@@ -1,12 +1,12 @@
 # ReadyAgents Core 0.3.0 — install
 
-ReadyAgents Core **0.3.0** is a local YAML agent-workflow engine (BYOK). The sdist and wheel are built; packaging is PyPI-ready.
+ReadyAgents Core **0.3.0** is a local YAML agent-workflow engine (BYOK). This package is not on PyPI. Install from a clone.
 
 ```bash
-pip install readyagents==0.3.0
-# until the public index lists it, install the wheel from this repo:
-# pip install dist/readyagents-0.3.0-py3-none-any.whl
-readyagents version   # 0.3.0
+git clone https://github.com/readyagents/readyagents-core.git
+cd readyagents-core
+pip install -e .
+readyagents version
 readyagents run examples/calc_pipeline.yaml
 ```
 
