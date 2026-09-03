@@ -37,7 +37,7 @@ Quote the current MCP tools reference:
 
 > Executing workflows with multi-step forms or any kind of human-in-the-loop interactions isn't supported.
 
-ReadyAgents 0.8.2: PARTIAL. We checkpoint locally and have an approval node, but we do not expose a networked task-handle/poll API, so we do not solve the networked MCP Server Trigger case end-to-end. Do not imply n8n cannot do async; instance-level `execute_workflow` already returns an execution ID.
+ReadyAgents 0.8.2: PARTIAL. We checkpoint locally and have an approval node, but we do not expose a networked task-handle/poll API, so we do not solve the networked MCP Server Trigger case end-to-end. n8n's instance-level `execute_workflow` already returns an execution ID immediately; this page is only about the MCP Server Trigger surface.
 
 ## Design note: modern MCP uses retry-shaped multi-round trips
 
