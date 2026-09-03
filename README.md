@@ -119,6 +119,7 @@ flowchart LR
 
 ## Docs
 
+- [Why ReadyAgents?](docs/why-readyagents.md)
 - [Getting started](docs/getting-started.md)
 - [First ten minutes](docs/first-ten-minutes.md)
 - [Concepts](docs/concepts.md)
