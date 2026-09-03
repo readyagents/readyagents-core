@@ -4,6 +4,12 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+## 0.8.1 — 2026-09-03
+
+### Fixed
+
+- Install docs and the PyPI long description now match that `readyagents` is on PyPI (`pip install readyagents`). Clone-and-run still uses `examples/calc_pipeline.yaml`. The wheel does not ship `examples/`; pip-only first run is `readyagents new`.
+
 ## 0.8.0 — 2026-09-02
 
 ### Added
@@ -24,7 +30,7 @@ All notable changes to ReadyAgents Core.
 
 ### Safety
 
-- Core still has no always-on listener, scheduler, hosted control plane, extra database, billing, or Node.js toolchain. This package is not on PyPI; install from a clone.
+- Core still has no always-on listener, scheduler, hosted control plane, extra database, billing, or Node.js toolchain. Install with `pip install readyagents` or from a clone.
 
 ## 0.7.0 — 2026-08-27
 
