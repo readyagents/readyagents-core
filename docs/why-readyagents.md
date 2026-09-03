@@ -6,30 +6,48 @@ This page records three public reports about gaps between MCP wiring and durable
 workflow execution, and states plainly what ReadyAgents 0.8.2 does and does not do
 about each one. Each verdict is about our own software only.
 
-## Human-in-the-loop cannot park over the MCP surface
+## LangGraph MCP surface: MCP-exposed runs remain stateless
 
-Source: [langchain-ai/langgraph issue 8725](https://github.com/langchain-ai/langgraph/issues/8725)
+Sources: [langchain-ai/langgraph issue 8725](https://github.com/langchain-ai/langgraph/issues/8725) and [LangSmith server MCP docs](https://docs.langchain.com/langsmith/server-mcp)
 
-> A graph that calls `interrupt()` cannot park — there is nowhere to persist the pending state… Any HITL flow is therefore unreachable through the MCP surface.
+Quote issue 8725:
 
-ReadyAgents 0.8.2: PARTIAL — we persist after each node and resume paused runs, but mcp serve is synchronous stdio with no async task handle and no hosted recovery.
+> When a LangGraph Platform deployment is exposed as an MCP server, every tool call is executed as a temporary run: no durable state exists even while it runs (`checkpointer=None`), and its auto-created thread is deleted on completion.
 
-## A long workflow can outlive the call
+Quote LangSmith docs:
 
-Source: [n8n community thread on long-running workflows with native MCP](https://community.n8n.io/t/handling-long-running-workflows-with-native-mcp-controlling-ai-response-behavior/230035)
+> The current LangGraph MCP implementation does not support sessions. Each `/mcp` request is stateless and independent.
 
-> Ask: “Part 2 of my workflow could take 2-3 minutes… I'm hitting the 60-second MCP timeout limit.”
->
-> Reply: “No built-in alternative exists yet.”
+ReadyAgents 0.8.2: PARTIAL. We persist local workflow state and support resume/approval pauses, but `mcp serve` is synchronous stdio: it exposes no asynchronous task handle and no hosted recovery surface. This comparison is about the MCP surface, not LangGraph's other surfaces.
 
-ReadyAgents 0.8.2: NO for the networked gap — we checkpoint long runs locally but expose no task-handle or poll API and no always-on worker.
+## n8n MCP Server Trigger: a long synchronous call can lose the result, and HITL is unsupported
 
-## A tool cannot ask a question mid-call
+Sources: [n8n community thread on MCP Server Trigger 502 after ~125s](https://community.n8n.io/t/mcp-server-trigger-returns-502-after-125s-while-long-running-subworkflow-completes-successfully-and-is-triggered-twice/309413) and [n8n MCP Server tools reference](https://docs.n8n.io/connect/connect-to-n8n-mcp-server/mcp-server-tools-reference/)
 
-Source: [MCP Python SDK troubleshooting: no back-channel for server-initiated requests](https://github.com/modelcontextprotocol/python-sdk/blob/main/docs/troubleshooting.md#mcperror-cannot-send-elicitationcreate-this-transport-context-has-no-back-channel-for-server-initiated-requests)
+Quote the 2026-08-25 thread:
 
-> “The modern protocol has no server-initiated requests at all, so the server refuses before anything is sent.”
->
-> “Cannot send 'elicitation/create': this transport context has no back-channel for server-initiated requests.”
+> MCP request starts → long-running subworkflow continues → MCP request/connection times out after about 120 seconds → external caller receives 502 → n8n subworkflow continues and eventually succeeds
 
-ReadyAgents 0.8.2: PARTIAL — our approval node plus persisted pause and later decide/resume sidesteps it at the workflow layer; we do not restore protocol elicitation.
+Quote the reply:
+
+> A tool that legitimately runs 2 to 4 minutes cannot answer synchronously.
+
+Quote the current MCP tools reference:
+
+> Executing workflows with multi-step forms or any kind of human-in-the-loop interactions isn't supported.
+
+ReadyAgents 0.8.2: PARTIAL. We checkpoint locally and have an approval node, but we do not expose a networked task-handle/poll API, so we do not solve the networked MCP Server Trigger case end-to-end. Do not imply n8n cannot do async; instance-level `execute_workflow` already returns an execution ID.
+
+## Design note: modern MCP uses retry-shaped multi-round trips
+
+Sources: [MCP specification: Multi Round-Trip Requests (MRTR)](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr) and [Python SDK elicitation handlers](https://py.sdk.modelcontextprotocol.io/handlers/elicitation/)
+
+Quote the spec:
+
+> Multi Round-Trip Requests (MRTR) was introduced in this version of the MCP specification. This replaces the previous approach of sending server-initiated requests.
+
+Quote the Python SDK:
+
+> A resolver works on every connection. For a client on a legacy connection the SDK sends it the question directly; on a 2026-07-28 connection the SDK returns the question from the call, and the client's next attempt carries the answer.
+
+This is a design note, not a competitor gap. The ask is now a stateless retry-shaped resolver; ReadyAgents sidesteps it with a persisted approval node, and does not implement MRTR or protocol elicitation.
