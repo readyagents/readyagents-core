@@ -6,6 +6,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from readyagents import __version__
 from readyagents.cli import app
 from readyagents.config import clear_settings_cache
 
@@ -38,7 +39,7 @@ def test_help() -> None:
 def test_version() -> None:
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "0.8.0" in result.stdout
+    assert __version__ in result.stdout
 
 
 def test_packs_none_installed() -> None:
