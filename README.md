@@ -6,11 +6,11 @@ Site: [readyagents.dev](https://readyagents.dev). Repo: [github.com/readyagents/
 
 Tried it? Open an [I-ran-this](https://github.com/readyagents/readyagents-core/issues/new?template=i-ran-this.md) issue. We are not launching. We are listening.
 
-This repository is the free core. You keep the provider account and the bill. The package is not on PyPI. Install from this clone.
+This repository is the free core. You keep the provider account and the bill. Install with `pip install readyagents`, or from this clone.
 
 ## 60-second start
 
-Requires Python 3.11+. Current version is **0.8.0**. This package is **not on PyPI**. Install from this clone.
+Requires Python 3.11+. Current version is **0.8.1**. Install with `pip install readyagents`, or from this clone.
 
 First-run clip: [watch the 60-second run](https://www.youtube.com/watch?v=D69o_HTGNQk)
 
@@ -25,6 +25,13 @@ readyagents runs list
 ```
 
 `readyagents run examples/calc_pipeline.json` is the same graph.
+
+Or from PyPI (the wheel does not ship `examples/`):
+
+```bash
+pip install readyagents
+readyagents new my-flow
+```
 
 HITL next: [docs/first-ten-minutes.md](docs/first-ten-minutes.md).
 
@@ -122,16 +129,18 @@ flowchart LR
 - [Changelog](CHANGELOG.md)
 - [Release notes 0.8.0](RELEASE_NOTES.md)
 
-## Install extras (still from this checkout)
+## Install extras
 
-LLM and MCP extras are optional. Install them from the cloned repo, not from PyPI:
+LLM and MCP extras are optional.
 
 ```bash
-pip install -e ".[openai]"
-pip install -e ".[anthropic]"
-pip install -e ".[mcp]"
-pip install -e ".[all]"
+pip install "readyagents[openai]"
+pip install "readyagents[anthropic]"
+pip install "readyagents[mcp]"
+pip install "readyagents[all]"
 ```
+
+From a clone, the same extras are `pip install -e ".[openai]"` (and `anthropic` / `mcp` / `all`).
 
 Then `cp .env.example .env` and paste your own keys. Core workflows that only use builtin tools do **not** need extras, keys, or Node.js.
 

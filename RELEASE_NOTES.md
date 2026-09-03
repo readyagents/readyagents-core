@@ -1,8 +1,21 @@
+# ReadyAgents Core 0.8.1
+
+**`readyagents` is on PyPI.** Same engine as 0.8.0. Install docs no longer say the package is missing.
+
+```bash
+pip install readyagents
+readyagents new my-flow
+```
+
+The wheel does not ship `examples/`. Clone-and-run still uses `examples/calc_pipeline.yaml`.
+
+---
+
 # ReadyAgents Core 0.8.0
 
-**Eval CLI, local packs, workspace `list_dir`, extra `new` templates, unified `--json`. Still local. No always-on. No Node.js. Not on PyPI.**
+**Eval CLI, local packs, workspace `list_dir`, extra `new` templates, unified `--json`. Still local. No always-on. No Node.js.**
 
-0.8.0 is the engine cut after 0.7.0. Install from a clone (`pip install -e .`). This package is not on PyPI.
+0.8.0 is the engine cut after 0.7.0. Install with `pip install readyagents` or from a clone (`pip install -e .`).
 
 ## Why this release matters
 
@@ -29,7 +42,6 @@ readyagents run examples/gated_write.yaml --approve gate --no-persist
 
 ## What we deliberately left out of core
 
-- PyPI publish (packaging is ready; install docs stay clone-only until a real upload)
 - Nested foreach, `http_request` POST, inbound listeners, streaming
 - Hosted control plane, extra databases, billing, always-on workers, Node.js
 
