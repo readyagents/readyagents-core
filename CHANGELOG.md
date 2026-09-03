@@ -4,6 +4,12 @@ All notable changes to ReadyAgents Core.
 
 ## Unreleased
 
+## 0.8.2 — 2026-09-03
+
+### Added
+
+- MCP Registry metadata: the packaged README carries the ownership marker and `server.json` describes the local stdio MCP server.
+
 ## 0.8.1 — 2026-09-03
 
 ### Fixed
