@@ -2,9 +2,10 @@
 
 MCP connectivity is not durable orchestration.
 
-This page records three public reports about gaps between MCP wiring and durable
-workflow execution, and states plainly what ReadyAgents 0.8.2 does and does not do
-about each one. Each verdict is about our own software only.
+This page records two public reports about gaps between MCP wiring and durable
+workflow execution, plus one design note about how modern MCP asks a question. It
+states plainly what ReadyAgents 0.8.2 does and does not do. Each verdict is about
+our own software only.
 
 ## LangGraph MCP surface: MCP-exposed runs remain stateless
 
