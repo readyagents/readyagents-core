@@ -1,5 +1,6 @@
 # ReadyAgents Core
 
+<!-- mcp-name: io.github.readyagents/readyagents -->
 ReadyAgents is a free, self-hosted Apache-2.0 local one-shot agent workflow engine plus MCP toolkit: clone it, bring your own keys; always-on packs are waitlisted and not for sale.
 
 Site: [readyagents.dev](https://readyagents.dev). Repo: [github.com/readyagents/readyagents-core](https://github.com/readyagents/readyagents-core).
